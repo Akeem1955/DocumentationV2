@@ -1,10 +1,50 @@
-Here is the complete, unified, and formal **System Architecture and Developer Roadmap**, strictly following the **Waterfall Methodology**. 
+Here is the **Developer Resource Kit (Appendix)** to attach to your documentation. I have reviewed all the URLs you provided and translated their contents into plain, simple English. 
 
-All Azure references have been purged. This architecture is built **100% on the Google Ecosystem** (Google Cloud Platform, Firebase, Gemini API) and utilizes **Python** as the primary backend language to leverage Google’s first-class SDK support.
-
-This document is designed to be handed directly to your developers. No guesswork, no missing steps.
+This section tells your developers exactly *what* each link is, *why* they need it for this hackathon, and *who* should be reading it. 
 
 ---
+
+# 📚 APPENDIX: DEVELOPER RESOURCE KIT & REFERENCE URLs
+*Mandatory reading materials for the Hackathon Team to prevent wasting time on trial and error. Google has already provided the exact blueprints for what we are building.*
+
+### 1. The Core Live-Streaming Blueprint (Eyes & Ears)
+**URL:** [Way Back Home - Level 3: Building an ADK Bi-Directional Streaming Agent](https://codelabs.developers.google.com/way-back-home-level-3/instructions#0)
+* **Target Audience:** Frontend (Electron/UI) & Backend (Python) Developers
+* **What it is in simple terms:** This is Google’s official tutorial on how to capture a user's webcam and microphone in the browser (or Electron) and stream it directly to Gemini using WebSockets. 
+* **Why it is helpful for us:** 
+  * **Frontend:** It gives you the exact JavaScript code needed to capture video frames at 2 FPS, encode them to Base64, and send them over WebSockets (see the *“Implement the WebSocket Hook”* section). You don't need to guess how to format the data.
+  * **Backend:** It shows exactly how to set up a Python FastAPI server to receive those audio/video chunks and feed them into Google’s Agent Development Kit (ADK) `LiveRequestQueue`.
+
+### 2. The Multi-Agent & Streaming Tools Guide (The Orchestrator)
+**URL:** [Way Back Home - Level 4: Live Bidirectional Multi-Agent system](https://codelabs.developers.google.com/way-back-home-level-4/instructions#0)
+* **Target Audience:** Python Backend / Systems Developers
+* **What it is in simple terms:** This codelab teaches how to make one "Main Agent" talk to other "Sub-Agents" (like an Orchestrator talking to a Database Agent) while handling a live video feed.
+* **Why it is helpful for us:**
+  * It explains how to build a **Streaming Tool**. For our proctoring use case, if you want the AI to constantly monitor the video feed for a phone or a candidate looking away without blocking the conversation, the code for a background "Sentinel" or monitoring loop is right here.
+  * It shows exactly how to format the `RunConfig` payload for a bidirectional session (handling text, audio, and tools simultaneously).
+
+### 3. The File Upload & Sequential Agent Guide (The Pipeline)
+**URL:** [Build a Multimodal AI Agent with Graph RAG, ADK & Memory Bank](https://codelabs.developers.google.com/codelabs/survivor-network/instructions#0)
+* **Target Audience:** Python Backend Developers
+* **What it is in simple terms:** A massive tutorial on building complex AI pipelines. You can ignore the "Graph RAG" and "Spanner" database stuff for our project. **Focus strictly on Section 9 & 10: Multimodal Pipeline.**
+* **Why it is helpful for us:** 
+  * If the candidate needs to upload a resume or if the agent needs to read a static code file, this shows you how to build a **Sequential Agent**. 
+  * It provides the exact Python code for a `multimedia_agent.py` that handles file uploads, extracts data from the file using Gemini Vision, and saves the output.
+
+### 4. The "Hands" Standard: Model Context Protocol (MCP) in ADK
+**URL:** [Agent Development Kit (ADK) - Model Context Protocol (MCP)](https://google.github.io/adk-docs/mcp/)
+* **Target Audience:** Backend & VM (QEMU) Tooling Developers
+* **What it is in simple terms:** The official documentation on how Google’s ADK interacts with MCP. MCP is the universal plug-and-play standard we are using to let Gemini securely run code in the QEMU VM and write to the database.
+* **Why it is helpful for us:**
+  * It shows you how to use `FastMCP` (a Python library) to turn a simple Python function (like `execute_bash()`) into an official MCP tool with just a single `@mcp.tool()` decorator.
+  * It prevents you from writing complex API wrappers from scratch. You just write the Python function, wrap it in FastMCP, and Google's ADK knows exactly how to let Gemini call it.
+
+---
+
+### 💡 Quick Strategy for the Team Lead:
+1. Have the **Frontend Dev** read **URL #1** immediately to grab the WebSocket and MediaRecorder code.
+2. Have the **Backend Dev** read **URL #1 and #2** to understand how `LiveRequestQueue` handles the incoming video/audio bytes.
+3. Have the **Systems Dev** (handling the VM/Tools) read **URL #4** to understand how to expose the local Bash terminal to the AI using FastMCP.
 
 # 📂 SYSTEM ARCHITECTURE & DEVELOPMENT ROADMAP
 **Project:** Live Multimodal Interview & Proctoring Platform  
