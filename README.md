@@ -1,50 +1,11 @@
-Here is the **Developer Resource Kit (Appendix)** to attach to your documentation. I have reviewed all the URLs you provided and translated their contents into plain, simple English. 
 
-This section tells your developers exactly *what* each link is, *why* they need it for this hackathon, and *who* should be reading it. 
 
----
 
-# 📚 APPENDIX: DEVELOPER RESOURCE KIT & REFERENCE URLs
-*Mandatory reading materials for the Hackathon Team to prevent wasting time on trial and error. Google has already provided the exact blueprints for what we are building.*
 
-### 1. The Core Live-Streaming Blueprint (Eyes & Ears)
-**URL:** [Way Back Home - Level 3: Building an ADK Bi-Directional Streaming Agent](https://codelabs.developers.google.com/way-back-home-level-3/instructions#0)
-* **Target Audience:** Frontend (Electron/UI) & Backend (Python) Developers
-* **What it is in simple terms:** This is Google’s official tutorial on how to capture a user's webcam and microphone in the browser (or Electron) and stream it directly to Gemini using WebSockets. 
-* **Why it is helpful for us:** 
-  * **Frontend:** It gives you the exact JavaScript code needed to capture video frames at 2 FPS, encode them to Base64, and send them over WebSockets (see the *“Implement the WebSocket Hook”* section). You don't need to guess how to format the data.
-  * **Backend:** It shows exactly how to set up a Python FastAPI server to receive those audio/video chunks and feed them into Google’s Agent Development Kit (ADK) `LiveRequestQueue`.
 
-### 2. The Multi-Agent & Streaming Tools Guide (The Orchestrator)
-**URL:** [Way Back Home - Level 4: Live Bidirectional Multi-Agent system](https://codelabs.developers.google.com/way-back-home-level-4/instructions#0)
-* **Target Audience:** Python Backend / Systems Developers
-* **What it is in simple terms:** This codelab teaches how to make one "Main Agent" talk to other "Sub-Agents" (like an Orchestrator talking to a Database Agent) while handling a live video feed.
-* **Why it is helpful for us:**
-  * It explains how to build a **Streaming Tool**. For our proctoring use case, if you want the AI to constantly monitor the video feed for a phone or a candidate looking away without blocking the conversation, the code for a background "Sentinel" or monitoring loop is right here.
-  * It shows exactly how to format the `RunConfig` payload for a bidirectional session (handling text, audio, and tools simultaneously).
 
-### 3. The File Upload & Sequential Agent Guide (The Pipeline)
-**URL:** [Build a Multimodal AI Agent with Graph RAG, ADK & Memory Bank](https://codelabs.developers.google.com/codelabs/survivor-network/instructions#0)
-* **Target Audience:** Python Backend Developers
-* **What it is in simple terms:** A massive tutorial on building complex AI pipelines. You can ignore the "Graph RAG" and "Spanner" database stuff for our project. **Focus strictly on Section 9 & 10: Multimodal Pipeline.**
-* **Why it is helpful for us:** 
-  * If the candidate needs to upload a resume or if the agent needs to read a static code file, this shows you how to build a **Sequential Agent**. 
-  * It provides the exact Python code for a `multimedia_agent.py` that handles file uploads, extracts data from the file using Gemini Vision, and saves the output.
 
-### 4. The "Hands" Standard: Model Context Protocol (MCP) in ADK
-**URL:** [Agent Development Kit (ADK) - Model Context Protocol (MCP)](https://google.github.io/adk-docs/mcp/)
-* **Target Audience:** Backend & VM (QEMU) Tooling Developers
-* **What it is in simple terms:** The official documentation on how Google’s ADK interacts with MCP. MCP is the universal plug-and-play standard we are using to let Gemini securely run code in the QEMU VM and write to the database.
-* **Why it is helpful for us:**
-  * It shows you how to use `FastMCP` (a Python library) to turn a simple Python function (like `execute_bash()`) into an official MCP tool with just a single `@mcp.tool()` decorator.
-  * It prevents you from writing complex API wrappers from scratch. You just write the Python function, wrap it in FastMCP, and Google's ADK knows exactly how to let Gemini call it.
 
----
-
-### 💡 Quick Strategy for the Team Lead:
-1. Have the **Frontend Dev** read **URL #1** immediately to grab the WebSocket and MediaRecorder code.
-2. Have the **Backend Dev** read **URL #1 and #2** to understand how `LiveRequestQueue` handles the incoming video/audio bytes.
-3. Have the **Systems Dev** (handling the VM/Tools) read **URL #4** to understand how to expose the local Bash terminal to the AI using FastMCP.
 
 # 📂 SYSTEM ARCHITECTURE & DEVELOPMENT ROADMAP
 **Project:** Live Multimodal Interview & Proctoring Platform  
@@ -54,23 +15,23 @@ This section tells your developers exactly *what* each link is, *why* they need 
 ---
 
 ## PHASE 1: System Requirements Specification (SRS)
-*This phase freezes the project scope. No new features will be added beyond this point to ensure hackathon completion.*
+*Team, this phase freezes our project scope. We are not adding any new features beyond this point so we can guarantee we actually finish this hackathon on time.*
 
 ### 1.1 Core Objectives
-*   **Identity & Access:** Candidates authenticate via **Firebase Authentication** (Email Link / Magic Link) to prevent unauthorized access.
-*   **Controlled Workspace (Frontend):** An **Electron** desktop application that enforces a lock-down (kiosk mode) and launches a lightweight **QEMU** virtual machine (running Alpine Linux) for candidate tasks.
-*   **The Brain & Senses (AI Intelligence):** **Gemini 2.0 Multimodal Live API** acts as the proctor and interviewer. It natively processes continuous video and audio streams. *No local computer vision scripts.*
-*   **The Hands (Action Execution):** **Model Context Protocol (MCP)** via Python. MCP servers act as secure bridges allowing Gemini to execute code inside the QEMU VM and write reports to **Google Cloud SQL**.
+*   **Identity & Access:** Candidates will authenticate via **Firebase Authentication** (Email Link / Magic Link) to prevent unauthorized access.
+*   **Controlled Workspace (Frontend):** We are building an **Electron** desktop application that enforces a lock-down (kiosk mode) and launches a lightweight **QEMU** virtual machine (running Alpine Linux) for candidate tasks.
+*   **The Brain & Senses (AI Intelligence):** **Gemini 2.0 Multimodal Live API** acts as our proctor and interviewer. It natively processes continuous video and audio streams. *Remember: No local computer vision scripts. We are letting Gemini do the heavy lifting.*
+*   **The Hands (Action Execution):** **Model Context Protocol (MCP)** via Python. Our MCP servers will act as secure bridges allowing Gemini to execute code inside the QEMU VM and write reports to **Google Cloud SQL**.
 
 ### 1.2 Strict Constraints
-*   **Ecosystem:** Exclusively Google (GCP, Firebase, Gemini).
+*   **Ecosystem:** Exclusively Google (GCP, Firebase, Gemini). Do not deviate.
 *   **Backend:** Python 3.10+ using the official `google-genai` SDK and Python MCP SDK.
 *   **Frontend:** Node.js/Electron.
 
 ---
 
 ## PHASE 2: System Architecture & Design
-*The precise blueprint of component interactions. Frontend and Backend developers must adhere strictly to these interfaces.*
+*This is our precise blueprint for component interactions. Frontend and Backend devs, I need you to adhere strictly to these interfaces.*
 
 ### 2.1 Component Architecture Diagram
 
@@ -108,15 +69,15 @@ This section tells your developers exactly *what* each link is, *why* they need 
   +------------------------------------------------------------------------------+
 ```
 
-### 2.2 Sub-System Breakdown for Developers
+### 2.2 Sub-System Breakdown for the Team
 
 **Frontend (Electron):**
-*   **Role:** The shell. It verifies identity via Firebase, locks the screen, captures the user's webcam/mic, and pipes that raw media data to the local Python Backend. It also embeds the QEMU display.
-*   **Input/Output:** Sends Base64 video frames and PCM audio to Python. Receives PCM audio (Gemini's voice) from Python to play through speakers.
+*   **Your Role:** You are building the shell. It verifies identity via Firebase, locks the screen, captures the user's webcam/mic, and pipes that raw media data down to the local Python Backend. You will also embed the QEMU display.
+*   **Input/Output:** Send Base64 video frames and PCM audio to Python. Receive PCM audio (Gemini's voice) from Python to play through the speakers.
 
 **Backend (Python - The Orchestrator):**
-*   **Role:** The central router. It uses the `google-genai` Python SDK to open a bidirectional WebSocket to Gemini. It pipes the media from Electron up to Google. 
-*   **Tool Handling:** When Gemini decides to call a tool (e.g., the user says "run my code"), the Python backend receives the `FunctionCall` from the WebSocket. It uses the Python MCP SDK to pass this to the specific MCP Server.
+*   **Your Role:** You are the central router. Use the `google-genai` Python SDK to open a bidirectional WebSocket to Gemini. Pipe the media from Electron up to Google. 
+*   **Tool Handling:** When Gemini decides to call a tool (e.g., the user says "run my code"), the Python backend receives the `FunctionCall` from the WebSocket. Use the Python MCP SDK to pass this to the specific MCP Server.
 
 **MCP Servers (Python):**
 1.  **VM MCP Server:** Runs inside QEMU. Executes candidate code and returns terminal output.
@@ -125,12 +86,12 @@ This section tells your developers exactly *what* each link is, *why* they need 
 ---
 
 ## PHASE 3: Implementation Plan (Developer Instructions)
-*The step-by-step build order. Teams can work on Frontend and Backend in parallel based on these specs.*
+*Here is our step-by-step build order. You guys can work on Frontend and Backend in parallel based on these specs.*
 
 ### Step 1: Frontend - Access & Lockdown (Hours 1-6)
 **Assigned to: Frontend / UI Devs**
-1.  **Firebase Auth:** Initialize Firebase JS SDK in Electron. Implement Email Link authentication. Do not allow the app to proceed without a valid token.
-2.  **Kiosk Mode:** Configure Electron `BrowserWindow` with `fullscreen: true`, `kiosk: true`, `alwaysOnTop: true`. Use `globalShortcut` to intercept and disable 'CommandOrControl+Tab', 'Alt+Tab', 'Esc'.
+1.  **Firebase Auth:** Initialize the Firebase JS SDK in Electron. Implement Email Link authentication. Do not allow the app to proceed without a valid token.
+2.  **Kiosk Mode:** Configure the Electron `BrowserWindow` with `fullscreen: true`, `kiosk: true`, `alwaysOnTop: true`. Use `globalShortcut` to intercept and disable 'CommandOrControl+Tab', 'Alt+Tab', 'Esc'.
 3.  **Media Capture:** Use standard `navigator.mediaDevices.getUserMedia({ video: true, audio: true })`.
     *   *Video Constraint:* Downsample to 1 frame per second, convert to Base64 JPEG.
     *   *Audio Constraint:* 16kHz, single channel (mono) PCM.
@@ -140,7 +101,7 @@ This section tells your developers exactly *what* each link is, *why* they need 
 **Assigned to: Python Backend Devs**
 1.  **Setup Google SDK:** Install `google-genai`. Authenticate using a GCP Service Account (`GOOGLE_API_KEY`).
 2.  **Live WebSocket Connection:** Write a Python script using `asyncio` to connect to the Gemini Live API.
-3.  **System Instruction Payload:** Configure the session exactly like this:
+3.  **System Instruction Payload:** I need you to configure the session exactly like this:
     ```python
     config = {
         "system_instruction": {
@@ -161,7 +122,7 @@ This section tells your developers exactly *what* each link is, *why* they need 
 1.  **QEMU Setup:** Download Alpine Linux (~150MB). Configure a shared folder or SSH local bridge between the Host OS and Guest OS.
 2.  **Code Execution MCP (Inside VM):** 
     *   Write a tiny Python MCP server that exposes `execute_bash`.
-    *   *Security:* It only runs inside the QEMU environment, so if the candidate writes `rm -rf /`, it only destroys the disposable VM.
+    *   *Security Note:* It only runs inside the QEMU environment, so if the candidate writes `rm -rf /`, it only destroys the disposable VM.
 3.  **Database MCP (Host OS):**
     *   Provision a Google Cloud SQL (PostgreSQL) instance.
     *   Write a Python MCP server using `asyncpg` or `SQLAlchemy` that securely connects to GCP using Workload Identity or Service Account keys.
@@ -175,7 +136,7 @@ This section tells your developers exactly *what* each link is, *why* they need 
 ---
 
 ## PHASE 4: Testing Plan
-*Run these specific scenarios to guarantee demo stability.*
+*We need to run these specific scenarios to guarantee our demo is completely stable.*
 
 *   **Test 1: Impersonation / Access.** Try to open the Electron app without clicking a Firebase Magic Link. *Expected:* App remains locked on login screen.
 *   **Test 2: Behavioral Proctoring (Native Gemini).** Start the interview. Look down at a cell phone for 6 seconds. *Expected:* Gemini detects the phone in the video frames and instantly generates audio: *"Please put your phone away."*
@@ -185,7 +146,7 @@ This section tells your developers exactly *what* each link is, *why* they need 
 ---
 
 ## PHASE 5: Demo & Pitch Strategy
-*How to present this to the Google Hackathon Judges.*
+*Here is how we are going to present and pitch this to the Google Hackathon Judges. Let's make sure we hit these points.*
 
 **1. The Hook:**
 "We built a fully isolated, hardware-accelerated technical interview environment that utilizes **Gemini 2.0 Multimodal Live API** as a native, real-time proctor and conversational interviewer."
@@ -201,6 +162,53 @@ This section tells your developers exactly *what* each link is, *why* they need 
 *   Show the locked workspace.
 *   Pull out a phone on stage—let the judges hear Gemini native-voice scold you in real-time.
 *   Ask Gemini to run some code, proving the MCP bridge to QEMU works.
-*   End the interview, open Google Cloud Console, and show the freshly generated structured report in Cloud SQL. 
+*   End the interview, open Google Cloud Console, and show the freshly generated structured report in Cloud SQL.
 
-*End of Document. The architecture is locked. Developers may begin Phase 1 immediately.*
+
+
+
+
+
+
+Team, here is the **Developer Resource Kit (Appendix)** we are attaching to our documentation. I have reviewed all the URLs we collected and translated their contents into plain, simple English for us. 
+
+This section tells you exactly *what* each link is, *why* we need it for this hackathon, and *who* on the team should be reading it. Let's execute this.
+
+---
+
+# 📚 APPENDIX: DEVELOPER RESOURCE KIT & REFERENCE URLs
+*Listen up: these are mandatory reading materials for the team to prevent us from wasting time on trial and error. Google has already provided the exact blueprints for what we are building, so let's use them.*
+
+### 1. The Core Live-Streaming Blueprint (Eyes & Ears)
+**URL:** [Way Back Home - Level 3: Building an ADK Bi-Directional Streaming Agent](https://codelabs.developers.google.com/way-back-home-level-3/instructions#0)
+* **Target Audience:** Our Frontend (Electron/UI) & Backend (Python) Devs
+* **What it is in simple terms:** This is Google’s official tutorial on how to capture a user's webcam and microphone in the browser (or Electron) and stream it directly to Gemini using WebSockets. 
+* **Why it is helpful for us:** 
+  * **Frontend Team:** It gives you the exact JavaScript code needed to capture video frames at 2 FPS, encode them to Base64, and send them over WebSockets (see the *“Implement the WebSocket Hook”* section). You don't need to guess how to format the data.
+  * **Backend Team:** It shows exactly how you need to set up our Python FastAPI server to receive those audio/video chunks and feed them into Google’s Agent Development Kit (ADK) `LiveRequestQueue`.
+
+### 2. The Multi-Agent & Streaming Tools Guide (The Orchestrator)
+**URL:** [Way Back Home - Level 4: Live Bidirectional Multi-Agent system](https://codelabs.developers.google.com/way-back-home-level-4/instructions#0)
+* **Target Audience:** Our Python Backend / Systems Devs
+* **What it is in simple terms:** This codelab teaches us how to make one "Main Agent" talk to other "Sub-Agents" (like an Orchestrator talking to a Database Agent) while handling a live video feed.
+* **Why it is helpful for us:**
+  * It explains how to build a **Streaming Tool**. For our proctoring use case, if we want the AI to constantly monitor the video feed for a phone or a candidate looking away without blocking the conversation, the code for a background "Sentinel" or monitoring loop is right here.
+  * It shows us exactly how to format the `RunConfig` payload for a bidirectional session (handling text, audio, and tools simultaneously).
+
+### 3. The File Upload & Sequential Agent Guide (The Pipeline)
+**URL:** [Build a Multimodal AI Agent with Graph RAG, ADK & Memory Bank](https://codelabs.developers.google.com/codelabs/survivor-network/instructions#0)
+* **Target Audience:** Our Python Backend Devs
+* **What it is in simple terms:** A massive tutorial on building complex AI pipelines. You guys can ignore the "Graph RAG" and "Spanner" database stuff for our project. **Focus strictly on Section 9 & 10: Multimodal Pipeline.**
+* **Why it is helpful for us:** 
+  * If the candidate needs to upload a resume or if our agent needs to read a static code file, this shows you how to build a **Sequential Agent**. 
+  * It provides the exact Python code for a `multimedia_agent.py` that handles file uploads, extracts data from the file using Gemini Vision, and saves the output.
+
+### 4. The "Hands" Standard: Model Context Protocol (MCP) in ADK
+**URL:** [Agent Development Kit (ADK) - Model Context Protocol (MCP)](https://google.github.io/adk-docs/mcp/)
+* **Target Audience:** Our Backend & VM (QEMU) Tooling Devs
+* **What it is in simple terms:** The official documentation on how Google’s ADK interacts with MCP. MCP is the universal plug-and-play standard we are using to let Gemini securely run code in the QEMU VM and write to the database.
+* **Why it is helpful for us:**
+  * It shows you how to use `FastMCP` (a Python library) to turn a simple Python function (like `execute_bash()`) into an official MCP tool with just a single `@mcp.tool()` decorator.
+  * It prevents you from writing complex API wrappers from scratch. You just write the Python function, wrap it in FastMCP, and Google's ADK knows exactly how to let Gemini call it.
+
+---
