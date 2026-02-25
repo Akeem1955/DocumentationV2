@@ -212,3 +212,59 @@ This section tells you exactly *what* each link is, *why* we need it for this ha
   * It prevents you from writing complex API wrappers from scratch. You just write the Python function, wrap it in FastMCP, and Google's ADK knows exactly how to let Gemini call it.
 
 ---
+
+
+
+
+
+
+
+
+
+
+
+As the backend developer/orchestrator for this hackathon, your primary challenges are **managing the live bidirectional WebSocket stream**, **implementing proactive video proctoring**, and **connecting to Python MCP servers**. 
+
+Google's "Way Back Home" Codelabs are basically a cheat sheet for your exact tech stack. However, you are on a hackathon clock, so **do not read all of them**. 
+
+Here is your exact reading list and a detailed breakdown of how each Codelab maps directly to your project requirements.
+
+---
+
+### 🚨 MUST READ: The Core Foundation
+#### [Level 3: Building an ADK Bi-Directional Streaming Agent](https://codelabs.developers.google.com/way-back-home-level-3/instructions#0) [3]
+**This is your Holy Grail.** It contains the exact Python backend blueprint for your Electron-to-Gemini bridge. If you only read one Codelab, read this.
+
+*   **What you will extract from it:**
+    *   **The `LiveRequestQueue` Logic (Section 5):** It shows you exactly how to solve the "impedance mismatch" between raw WebSocket data from Electron and Gemini's native ingestion. 
+    *   **The Upstream Task:** You will literally copy-paste the `upstream_task()` logic that receives Base64 video frames (at 1fps/2fps) and raw 16kHz PCM audio from the frontend and pushes them into `types.Blob` objects for Gemini.
+    *   **The Downstream Task:** It shows you how to use `runner.run_live()` to listen for Gemini's voice and Tool Calls, format them into JSON, and shoot them back down the WebSocket to Electron.
+    *   **Live Agent Prompting (Section 4):** It teaches you how to write "Control Loop Scripts" instead of standard prompts, which you will need to force Gemini to prioritize calling the `execute_bash` tool rather than just talking.
+
+#### [Level 4: Live Bidirectional Multi-Agent system](https://codelabs.developers.google.com/way-back-home-level-4/instructions#0)[4]
+Read this specifically for the **Proctoring** requirement. Standard LLMs wait for the user to speak. Your AI proctor needs to actively interrupt the user if they pull out a phone. 
+
+*   **What you will extract from it:**
+    *   **Streaming Tools / Background Monitors (Section 4):** This is the secret sauce for your proctoring requirement. It shows you how to write an `async def` function (like `monitor_for_hazard`) that runs in the background. It continuously intercepts the `LiveRequestQueue` video frames, runs a lightweight vision check, and `yields` a warning if a rule is broken. 
+    *   **Agent-as-a-Tool:** It teaches how to let a main Bi-Directional Agent communicate with other tools without breaking the live audio stream. You will use this to wrap your database MCP server.
+
+---
+
+### 📙 HIGHLY RECOMMENDED: The Action Layer
+####[Level 1: Pinpoint Location](https://codelabs.developers.google.com/way-back-home-level-1/instructions?hl=en#0) [1]
+Skip the first half about generating crash evidence. Go straight to **Section 4: Build the Custom MCP Server** and **Section 6: Build the MCP Tool Connections** [1].
+
+*   **What you will extract from it:**
+    *   **FastMCP (Section 4):** This shows you how to use the `FastMCP` Python library. You will use this exact syntax (`@mcp.tool()`) to build the tiny server that runs inside your Alpine Linux QEMU VM to execute candidate code.
+    *   **MCP Toolset (Section 6):** It provides the exact boilerplate for connecting Google's Agent Development Kit (ADK) to an external MCP server using `StreamableHTTPConnectionParams`. You will use this to connect your main Python backend to the Google Cloud SQL database.
+
+---
+
+### 🛑 DO NOT READ: Skip to Save Time
+*   **[Level 0: Identify Yourself](https://codelabs.developers.google.com/way-back-home-level-0/instructions?hl=en#0):** This is about text-to-image generation (making avatars) [2]. You are doing live video streaming. Skip it entirely [2].
+*   **[Level 5: Event-Driven Architecture with Kafka](https://codelabs.developers.google.com/way-back-home-level-5/instructions?hl=en#0):** This teaches how to decouple agents using Apache Kafka [5]. While cool, setting up a Kafka cluster during a 24/48-hour hackathon will destroy your timeline. Stick to direct WebSockets and HTTP/SSE for your MCP servers as defined in your strict constraints.
+
+### 💡 Your Backend Build Path (Action Plan)
+1.  **Hours 1-2:** Open **Level 3**. Copy the FastAPI boilerplate, WebSocket endpoints, and `LiveRequestQueue` setup. Use their "Loopback Test" script to ensure Electron can send you video/audio.
+2.  **Hours 3-5:** Go to **Level 1 (Section 4)**. Build your two `FastMCP` servers (one for QEMU Bash execution, one for Cloud SQL).
+3.  **Hours 6-8:** Open **Level 4 (Section 4)**. Write your `async def proctor_candidate()` Streaming Tool so Gemini can constantly watch the video stream for cell phones. Hook everything together into the `RunConfig`.
