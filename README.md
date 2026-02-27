@@ -23,13 +23,15 @@ This is an anti-cheat proctoring system. If the Gemini API keys or system prompt
 
 ```
 [ CANDIDATE'S LOCAL MACHINE ]
-Electron App (Captures A/V)  ─── WSS ──→  Java Cloud Server
+Electron App (A/V + Workspace UI) ─── WSS ──→ Java Cloud Server
 
-[ GOOGLE CLOUD PLATFORM ]
-Java Cloud Server (Spring Boot / ADK)  ─── WSS ──→  Gemini 2.5 Live API
-Java Cloud Server (Spring Boot / ADK)  ─── SQL ──→  Google Cloud SQL
-Java Cloud Server (Spring Boot / ADK)  ─── REST ──→ Sandbox API (Judge0)
+[ GOOGLE CLOUD PLATFORM (The Multi-Agent Hub) ]
+Java Cloud Server (ADK) ─── WSS (Stream A) ──→ Agent 2: Gemini Live API (Proctor/Interviewer)
+Java Cloud Server (ADK) ─── WSS (Stream B) ──→ Agent 3: Gemini Live API (Workspace/Compiler)
+Java Cloud Server (ADK) ─── SQL ──→ Google Cloud SQL
 ```
+
+*Note: Agent 3 handles all code compilation using Gemini's Native Code Execution tool. Agent 3 directly passes its evaluation results to Agent 2's context queue inside the Java Server via the ADK.*
 
 ### The Configurable Workspace Tools
 
@@ -37,7 +39,7 @@ Recruiters configure the workspace per interview (e.g., Algorithms vs. System De
 
 | Tool | Type | Description |
 |------|------|-------------|
-| **Code Editor + Runner** | Optional | Monaco editor integrated with a Sandbox execution API (Judge0) for real code execution |
+| **Code Editor + Runner** | Optional | Monaco editor integrated with Gemini's Native Code Execution tool (via Agent 3's Live API stream) for real code compilation and evaluation |
 | **Whiteboard** | Optional | HTML5 Canvas for architecture diagrams, parsed via Gemini Flash Vision |
 | **Notes** | Optional | Plain text scratchpad |
 | **Camera/Mic** | Mandatory | Always-on for proctoring |
@@ -49,7 +51,7 @@ Recruiters configure the workspace per interview (e.g., Algorithms vs. System De
 2. Electron streams raw media up to **Java Cloud Server** via secure WebSocket
 3. Java pipes the media into **Gemini 2.5 Live API** via the ADK
 4. Gemini responds with voice → Java sends audio back down to Electron → candidate hears the AI
-5. Candidate clicks **"Run / Review Workspace"** → Java sends code to an isolated **Sandbox API** (e.g., Judge0) for execution and parses Whiteboard via **Vision API** → Java injects the FACTUAL execution results into the Gemini Live stream → Gemini speaks feedback based on verified facts, preventing hallucinations
+5. Candidate clicks **"Run / Review Workspace"** → Java pushes code to **Agent 3's Live API stream** → Agent 3 natively executes the code via Gemini's Code Execution tool and parses Whiteboard via Vision → Java catches Agent 3's output and injects it into **Agent 2's Live stream** via the ADK → Agent 2 speaks feedback based on verified facts, preventing hallucinations
 6. Gemini dictates the final report → Java writes it directly to **Cloud SQL**
 
 ### The 4-Agent System
@@ -58,7 +60,7 @@ Recruiters configure the workspace per interview (e.g., Algorithms vs. System De
 |-------|------|----------|------|
 | **Agent 1: Recruiter Assistant** | Auto-generates custom technical questions from job title | Standard Gemini 2.5 Flash (one-shot `generateContent`) | Interview creation (`POST /api/interviews`) |
 | **Agent 2: Interviewer & Proctor** | The "Face". Conducts the conversational interview via voice and strictly monitors the webcam video for proctoring. It does NOT process UI interactions directly. | Gemini 2.5 Flash **Multimodal Live API** | Continuous (WSS Audio/Video only) |
-| **Agent 3: Smart Workspace Agent** | The "Engine". Owns all UI actions. Handles AI Copilot typing, executes code via Judge0, and parses Whiteboard diagrams via Vision. It silently informs Agent 2 of the results. | Standard Gemini 2.5 Flash (REST) + Judge0 API | Triggered by UI events (typing, clicking Run) |
+| **Agent 3: Smart Workspace Agent** | The "Engine". Owns the Code and Whiteboard. It runs concurrently with Agent 2. When the candidate codes, Agent 3 uses Gemini's Native Code Execution Tool to compile and evaluate the logic. It uses Vision for the whiteboard. It then communicates its findings directly to Agent 2 via the ADK. | Gemini 2.5 Flash **Multimodal Live API** (with Code Execution tool enabled) | Continuous (WSS UI/Workspace stream) |
 | **Agent 4: Assessor** | Takes full transcript + final code, generates structured JSON evaluation | Standard Gemini 2.5 **Pro** API with Structured Output (JSON Schema) | After interview ends (one-shot) |
 
 ---
@@ -439,15 +441,16 @@ The core routing logic inside the Java server:
 - **Downstream**: receive Gemini's audio/text responses → forward them to Electron via WSS as JSON events
 - **Tool calls**: receive `FunctionCall` events from Gemini → route to the appropriate handler
 
-#### B5.5 — Smart Workspace Handler (Agent 3)
-Agent 3 owns all UI events coming from Electron.
+#### B5.5 — The Multi-Agent ADK Orchestration (Agent 2 & Agent 3)
+This is a true **Multi-Agent architecture**. The Java Cloud Server maintains **two concurrent Live API WSS connections** via the ADK.
 
-1. **Auto-Smart (Copilot):** When the candidate types, Agent 3 silently fetches ghost-text via REST and sends it back to the UI. Agent 2 is not involved.
-2. **Workspace Review:** When the candidate clicks "Run / Review Workspace", Agent 3 executes the code in **Judge0** and parses the Whiteboard via **Gemini Flash Vision**.
-3. **The Handoff:** Agent 3 compiles these facts and injects a hidden text prompt into Agent 2's Live stream: `{"text": "SYSTEM ALERT FROM WORKSPACE AGENT: The candidate just ran their code. Execution output: [STDOUT]. Whiteboard: [VISION SUMMARY]. Acknowledge this and ask them about the time complexity."}`
-4. Agent 2 reads this hidden message and speaks to the candidate out loud.
+1. **Agent 2 (The Voice/Eyes):** Receives the webcam and mic. Talks to the user.
+2. **Agent 3 (The Brain/Compiler):** Receives the Monaco editor text and Whiteboard canvas data. Its `SessionConfig` has the **native Gemini Code Execution Tool** enabled.
+3. **The Agent-to-Agent Handoff:** When the user clicks "Run / Review Workspace", the Java server pushes the code to Agent 3's stream. Agent 3 natively executes the code, analyzes the whiteboard, and returns a factual evaluation.
+4. The Java Server catches Agent 3's output and uses the ADK to instantly inject a `ClientContent` message into Agent 2's live queue: `{"text": "MESSAGE FROM WORKSPACE AGENT: The user ran the code. It compiled successfully but fails on edge cases. The whiteboard is correct. Ask them about the edge cases."}`
+5. Agent 2 reads this internal system message and speaks out loud to the user.
 
-This guarantees strict **separation of concerns**: Agent 2 only handles voice + webcam, Agent 3 owns the entire workspace UI. If you swap Monaco for a different editor later, Agent 2 is untouched.
+This guarantees strict **separation of concerns** and **zero latency**: Agent 3 is already awake on its WSS connection, processes code instantly, fires results to Agent 2 in milliseconds, and the AI speaks almost immediately.
 
 #### B5.6 — Post-Interview Assessment (Agent 4: Assessor)
 When the interview ends (candidate says "I'm done" or timer runs out):
@@ -478,7 +481,7 @@ When Gemini triggers `write_cloud_sql_report`: extract `candidate_email`, `score
 | 3 | Gemini's audio plays through Electron speakers | ☐ |
 | 4 | Proctoring works natively: Gemini warns when phone detected or candidate looks away | ☐ |
 | 5 | Proctor alert appears as red banner in Electron UI | ☐ |
-| 6 | "Run / Review Workspace" → Agent 3 executes code in Sandbox + parses Whiteboard → Gemini gives factual feedback | ☐ |
+| 6 | "Run / Review Workspace" → Agent 3 executes code natively via Gemini Code Execution + parses Whiteboard → Gemini gives factual feedback | ☐ |
 | 7 | Post-interview: Assessor generates structured JSON report via Gemini Pro | ☐ |
 
 ---
@@ -499,7 +502,7 @@ Test this exact sequence. Every step must work without manual intervention:
 5. Gemini greets: *"Hello, I'm Owlyn. Let's begin your technical interview."*
 6. Gemini asks a coding question (from auto-generated questions)
 7. Candidate writes code in Monaco editor
-8. Candidate clicks **"Run / Review Workspace"** → Agent 3 executes code in Sandbox API and processes Whiteboard → Injects facts into stream → Gemini speaks feedback with 100% factual confidence
+8. Candidate clicks **"Run / Review Workspace"** → Agent 3 natively compiles code via Gemini Code Execution and processes Whiteboard → Injects facts into stream → Gemini speaks feedback with 100% factual confidence
 9. Gemini says: *"Your code compiles and passes. Well done."*
 10. **Proctor test**: hold up a phone → Gemini warns within 10 seconds
 11. Candidate says: *"I'm done"*
@@ -514,7 +517,7 @@ Test this exact sequence. Every step must work without manual intervention:
 | Access Control | Open app without JWT | Stays on login screen |
 | Invalid Code | Enter wrong 6-digit code | Error: "Invalid code" |
 | Proctoring | Look at phone for 6s | Gemini says: "Please put your phone away" |
-| Code Execution | Write code and click "Run / Review Workspace" | Sandbox executes code, Gemini speaks factual feedback |
+| Code Execution | Write code and click "Run / Review Workspace" | Agent 3 natively executes code, Agent 2 speaks factual feedback |
 | Whiteboard Vision | Draw a system diagram and click "Run / Review Workspace" | Gemini describes the diagram and gives design feedback |
 | DB Logging | Say "I am done" | Cloud SQL shows new structured JSON report row |
 | Lockdown | Press Alt+Tab during interview | Nothing happens (blocked) |
@@ -549,8 +552,8 @@ Test this exact sequence. Every step must work without manual intervention:
 **The Google Architecture Flex:**
 *"We didn't hack together random APIs. This is a pure Google ecosystem showcase. We use JWT for secure entry. We use the google-adk Java SDK in the cloud to stream raw 1fps video and PCM audio directly to Gemini so it can see and hear the candidate natively. There are no clunky computer vision scripts here — Gemini is the vision."*
 
-**The 4-Agent Orchestration Flex:**
-*"Instead of building a clunky virtual machine sandbox, we treated Gemini 2.5 like a real Senior Staff Engineer. We built a 4-Agent Orchestrated system. We use a single Multimodal Live API stream as our real-time Interviewer AND Proctor, eliminating token waste. To prevent code hallucinations, we decoupled the conversation from the evaluation using our Smart Assist Agent. It executes the candidate's code in an isolated Sandbox API and processes visual whiteboard diagrams, feeding undeniable, factual results directly into the Live API so the AI speaks with 100% confidence. Finally, an asynchronous Gemini Pro Assessor agent generates a structured JSON evaluation directly into Google Cloud SQL."*
+**The Multi-Agent Orchestration Flex:**
+*"We didn't just build a voice bot; we built a concurrent Multi-Agent architecture using Gemini to the core. Instead of hacking together slow third-party docker containers to run the candidate's code, we spun up a second, concurrent Gemini Live API stream (Agent 3) armed with Google's native Code Execution tool. Agent 3 silently watches the workspace, natively executes the code, parses the whiteboard vision, and then uses the Java ADK to secretly communicate those results in real-time to Agent 2, the Proctor. Agent 2 then speaks to the candidate with 100% factual confidence. It is a completely self-contained, multi-agent Google AI ecosystem."*
 
 **The Dual-Purpose Platform Flex:**
 *"We built Owlyn to be the ultimate secure proctoring environment for recruiters. But we realized the architecture we built — streaming 1fps desktop vision and PCM audio directly to Gemini Live — is perfectly suited for education. So, we added Practice Mode and Tutor Mode. By simply swapping the webcam feed for a screen-share feed, and changing Gemini's system prompt from 'Strict Proctor' to 'Patient Teacher,' Owlyn becomes a personalized desktop tutor that can see your homework, read your code, and guide you through problems in real-time. This shifts Owlyn from a B2B proctoring tool into a B2C educational platform where developers practice with a native, real-time Gemini AI and get private, actionable feedback to improve their careers."*
@@ -559,7 +562,7 @@ Test this exact sequence. Every step must work without manual intervention:
 1. Launch Electron, authenticate via JWT.
 2. Show the locked workspace.
 3. Pull out a phone on stage — let the judges hear Gemini native-voice scold you in real-time.
-4. Click "Run / Review Workspace" — show the Sandbox API executing code and Gemini giving factual feedback.
+4. Click "Run / Review Workspace" — show Agent 3 natively compiling code and Agent 2 speaking factual feedback in real-time.
 5. End the interview, open Google Cloud Console, and show the freshly generated structured JSON report in Cloud SQL.
 
 ---
@@ -571,7 +574,7 @@ Test this exact sequence. Every step must work without manual intervention:
 | 1 | Full loop (recruiter create → candidate interview → report) works E2E | ☐ |
 | 2 | JWT blocks unauthorized access | ☐ |
 | 3 | Proctoring detects phone and warns verbally (native Gemini) | ☐ |
-| 4 | Smart Assist (Agent 3) executes code in Sandbox + parses Whiteboard → factual feedback | ☐ |
+| 4 | Smart Assist (Agent 3) executes code via native Gemini tool + parses Whiteboard → factual feedback | ☐ |
 | 5 | Structured JSON report saved in Cloud SQL via Agent 4 (Gemini Pro) | ☐ |
 | 6 | Kiosk mode cannot be bypassed | ☐ |
 | 7 | DRM content protection blocks screen recording | ☐ |
@@ -681,9 +684,9 @@ If you cannot fully implement these stretch goals:
 * **Target Audience:** Java Backend Devs
 * **Why you need it:** After the Live WebSocket closes, Agent 4 (Gemini Pro) takes the transcript and generates the final evaluation. This documentation shows how to pass a JSON Schema into the API call to guarantee Gemini returns a perfectly formatted JSON object (`score`, `behavioral_notes`, `code_quality`) that maps exactly to your Google Cloud SQL `interview_reports` table.
 
-### 5. Sandbox Code Execution (The Hands)
+### 5. Gemini Native Code Execution (Agent 3's Compiler)
 
-**URL:** https://judge0.com/ (or https://github.com/engineer-man/piston)
+**URL:** https://ai.google.dev/gemini-api/docs/code-execution
 
 * **Target Audience:** Java Backend Devs
-* **Why you need it:** Agent 3 (Smart Assist) needs a secure, isolated environment to execute the candidate's code. Judge0 provides a REST API that accepts source code + language, runs it in a sandboxed container, and returns literal `stdout`, `stderr`, and `exitCode`. This guarantees zero hallucinations — Gemini speaks feedback based on real execution results.
+* **Why you need it:** Agent 3's `SessionConfig` enables Gemini's built-in Code Execution tool. When the candidate clicks "Run / Review Workspace", Agent 3 natively compiles and runs the code inside Gemini's own sandboxed environment — no third-party containers needed. This is a 100% Google ecosystem solution. The tool returns literal `stdout`, `stderr`, and execution analysis that Agent 3 passes to Agent 2 via the ADK.
