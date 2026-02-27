@@ -103,4 +103,9 @@ Validates the JWT and returns the user's data. Run this every time the Electron 
 
 ---
 
-**Would you like me to generate the corresponding `curl` commands for these endpoints so your frontend team can test them instantly in the terminal?**
+Hey! The backend for Phase 1 is officially done and secure. Everything aligns with the specs for F1.2 and F1.3 (JWT Bearer tokens, /api/auth/me returning 401 if expired, etc.).
+However, I upgraded our security to use a 2-Factor OTP flow via Redis. This means your Login and Signup UI needs a slight tweak:
+1. When they submit the Email+Password form, call /api/auth/signup (or login).
+2. Show them a 6-digit OTP input modal.
+3. Send that OTP to /api/auth/verify-signup (or verify-login) to get the actual JWT.
+Also, for the 'Candidate Entry' screen, just build the UI for now. Don't worry about the API for candidates yet; we will link that up
