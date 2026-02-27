@@ -284,7 +284,7 @@ All endpoints require JWT role = `ADMIN`. Return `403 Forbidden` for RECRUITER.
 #### F3.2 — Practice Interview Entry
 - "Practice Interview" bypasses code validation
 - Same workspace UI, same AI interview, but with "PRACTICE MODE" banner
-- No report saved at end
+- **Report routing**: Agent 4 still generates the structured JSON feedback, but instead of saving to Cloud SQL (recruiter-visible), it is returned directly to the Electron frontend so the candidate sees a **"Your Mock Interview Feedback"** screen with their score, behavioral notes, and code quality. Nothing is saved to the database.
 
 #### F3.3 — Pre-Flight Lobby
 - **Camera preview**: display live `<video>` so candidate can adjust lighting/position
@@ -552,6 +552,9 @@ Test this exact sequence. Every step must work without manual intervention:
 **The 4-Agent Orchestration Flex:**
 *"Instead of building a clunky virtual machine sandbox, we treated Gemini 2.5 like a real Senior Staff Engineer. We built a 4-Agent Orchestrated system. We use a single Multimodal Live API stream as our real-time Interviewer AND Proctor, eliminating token waste. To prevent code hallucinations, we decoupled the conversation from the evaluation using our Smart Assist Agent. It executes the candidate's code in an isolated Sandbox API and processes visual whiteboard diagrams, feeding undeniable, factual results directly into the Live API so the AI speaks with 100% confidence. Finally, an asynchronous Gemini Pro Assessor agent generates a structured JSON evaluation directly into Google Cloud SQL."*
 
+**The Dual-Purpose Platform Flex:**
+*"We built Owlyn to be the ultimate secure proctoring environment for recruiters. But we realized the architecture we built — streaming 1fps desktop vision and PCM audio directly to Gemini Live — is perfectly suited for education. So, we added Practice Mode and Tutor Mode. By simply swapping the webcam feed for a screen-share feed, and changing Gemini's system prompt from 'Strict Proctor' to 'Patient Teacher,' Owlyn becomes a personalized desktop tutor that can see your homework, read your code, and guide you through problems in real-time. This shifts Owlyn from a B2B proctoring tool into a B2C educational platform where developers practice with a native, real-time Gemini AI and get private, actionable feedback to improve their careers."*
+
 **The Live Demo Flow (5 Steps):**
 1. Launch Electron, authenticate via JWT.
 2. Show the locked workspace.
@@ -576,6 +579,70 @@ Test this exact sequence. Every step must work without manual intervention:
 | 9 | Admin/Recruiter dashboard shows live interview data | ☐ |
 | 10 | Recruiter can add feedback and approve report | ☐ |
 | 11 | Demo rehearsed successfully at least twice | ☐ |
+
+---
+
+## PHASE 7 — Stretch Goals (If Time Permits)
+
+> These are NOT required for launch. Only build these if Phases 1–6 are fully passing. They massively enhance the pitch and Devpost submission.
+
+### Stretch 1: Configurable Practice Interviews (The "Mock Interviewer")
+
+**Architectural Fit: 10/10** — Requires almost zero new backend logic.
+
+#### Frontend
+- Add a **"Configure Practice"** screen accessible from the Candidate dashboard
+- Input fields: Topic (e.g., "System Design — Microservices"), Duration (15/30/45 min), Difficulty (Easy/Medium/Hard)
+- On submit: call the same `POST /api/interviews` endpoint that recruiters use, but with `mode: PRACTICE` flag
+
+#### Backend
+- Reuse the existing `POST /api/interviews` endpoint. Agent 1 (Recruiter Assistant) auto-generates custom questions based on the candidate's chosen topic, just like it does for recruiters
+- The generated `ai_instructions` and `generated_questions` are fed into the Live session as usual
+- On completion, Agent 4 returns the report directly to Electron (not saved to DB)
+
+**Why judges love it**: This turns Owlyn into an AI-driven competitor to platforms like Pramp or LeetCode Premium. The candidate uses Gemini as their personal career coach.
+
+---
+
+### Stretch 2: Custom "Tutor" Mode (The Screen-Share Helper)
+
+**Architectural Fit: 9/10** — Uses the exact same WSS pipeline, just swaps the camera for the screen.
+
+#### Frontend
+- Add a **"Tutor Mode"** button on the Candidate dashboard
+- Instead of calling `navigator.mediaDevices.getUserMedia({ video: true })` to grab the webcam, use **Electron's native `desktopCapturer` API** to grab the user's screen
+- Still sample at 1fps, compress to Base64 JPEG, stream up the exact same WebSocket to Java
+- **No kiosk mode, no lockdown** — this is a learning tool, not a proctoring tool
+
+#### Backend
+- Swap the system instructions sent to Gemini's `SessionConfig`:
+  - **Interview prompt**: *"You are Owlyn, a strict proctor. If they look away, warn them."*
+  - **Tutor prompt**: *"You are Owlyn, a friendly, patient human tutor. You are looking at my screen. Do not give me direct answers; instead, guide me to figure out the math, translation, or code on the screen step-by-step."*
+- Everything else (WSS pipeline, media routing, voice playback) stays identical
+
+**Why judges love it**: This perfectly highlights the core strength of the Gemini 2.5 Multimodal Live API. Gemini reads UI layouts, parses code from images, and solves math visually. Screen-sharing proves the model can act as an omnipresent desktop co-pilot.
+
+---
+
+### Fallback Strategy (If You Run Out of Time)
+
+If you cannot fully implement these stretch goals:
+- Add the **"Tutor Mode"** and **"Configure Practice"** buttons to the Candidate Dashboard UI
+- Have them open a **"Coming Soon"** modal
+- **Mention them in your Devpost video and README** — judges value vision and roadmap thinking
+
+---
+
+### ✅ Phase 7 Stretch Checkpoint (Optional)
+
+| # | Check | Pass? |
+|---|-------|-------|
+| 1 | Candidate can configure their own practice interview (topic, duration, difficulty) | ☐ |
+| 2 | Agent 1 generates custom questions from candidate's chosen topic | ☐ |
+| 3 | Practice interview returns feedback to candidate (not saved to DB) | ☐ |
+| 4 | Tutor Mode captures screen instead of webcam via desktopCapturer | ☐ |
+| 5 | Tutor Mode uses patient teaching prompt (no proctoring) | ☐ |
+| 6 | Fallback: buttons exist in UI even if "Coming Soon" | ☐ |
 
 ---
 
