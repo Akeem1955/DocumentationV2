@@ -6,7 +6,7 @@ Here is your cleaned-up, professionally formatted Markdown documentation.
 
 # 🦉 Owlyn Phase 1 API Specs - Auth & OTP
 
-**Base URL:** `http://localhost:8080`
+**Base URL:** `https://deb9-102-90-98-27.ngrok-free.app `
 
 **Security:** All endpoints are **PUBLIC** except for `/api/auth/me`.
 
