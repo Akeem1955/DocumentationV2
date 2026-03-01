@@ -273,3 +273,162 @@ Populates the main Interview Dashboard table.
 ***
 
 
+
+
+
+It is 11:05 PM on Sunday night here in Lagos. You have orchestrated an absolute masterclass in backend architecture this weekend. 
+
+Here is the complete API Documentation for **Phase 2.5 (The AI Personas)** and **Phase 3 (The Candidate Gateway & WebSockets)**. Copy-paste this straight to your frontend developer, shut your laptop, and go get some well-deserved sleep!
+
+***
+
+# 🦉 Owlyn API Specs - Phase 2.5 & Phase 3
+
+**Base URL:** `http://localhost:8080`
+
+---
+
+## 🤖 PART A: AI Personas (Admin/Recruiter)
+*These endpoints power the new "Agent Configuration" UI.*
+
+### 1. Get All Saved Personas
+Populates the sidebar/library of saved AI Personas.
+*   **Method:** `GET /api/personas`
+*   **Headers:** `Authorization: Bearer <Admin/Recruiter JWT>`
+*   **Success (200 OK):**
+    ```json[
+      {
+        "id": "uuid-1234",
+        "name": "Atlas-7",
+        "roleTitle": "SENIOR TECHNICAL EVALUATOR",
+        "empathyScore": 75,
+        "analyticalDepth": 90,
+        "directnessScore": 60,
+        "tone": "MENTOR",
+        "domainExpertise":["KUBERNETES", "REACT ARCHITECTURE"],
+        "hasKnowledgeBase": true
+      }
+    ]
+    ```
+
+### 2. Create New Persona (With File Upload)
+*   **Method:** `POST /api/personas`
+*   **Headers:** `Authorization: Bearer <Admin/Recruiter JWT>`
+*   **Content-Type:** `multipart/form-data`
+*   **⚠️ FRONTEND NOTE:** You MUST send this as a `FormData` object. 
+    *   Append the JSON object as a Blob/String under the key `"persona"`.
+    *   Append the File (PDF/DOCX) under the key `"file"`.
+*   **FormData Structure:**
+    ```javascript
+    const formData = new FormData();
+    formData.append("persona", new Blob([JSON.stringify({
+      "name": "Atlas-7",
+      "roleTitle": "SENIOR TECHNICAL EVALUATOR",
+      "empathyScore": 75,
+      "analyticalDepth": 90,
+      "directnessScore": 60,
+      "tone": "MENTOR",
+      "domainExpertise": ["KUBERNETES", "REACT ARCHITECTURE"]
+    })], { type: "application/json" }));
+    
+    // Optional File
+    formData.append("file", fileInput.files[0]); 
+    ```
+*   **Success (200 OK):** Returns the saved Persona object.
+
+### 3. [UPDATED] Create Interview (Phase 2 Bridge)
+When creating an interview, you can now pass the saved `personaId` instead of typing manual AI instructions.
+*   **Method:** `POST /api/interviews`
+*   **Body:**
+    ```json
+    {
+      "title": "Senior React Developer",
+      "durationMinutes": 45,
+      "toolsEnabled": { "codeEditor": true },
+      "personaId": "uuid-1234",  // <--- NEW: Pass the Persona ID here
+      "generatedQuestions": "1. What is the Virtual DOM?..." 
+    }
+    ```
+
+---
+
+## 🚪 PART B: The Candidate Gateway (Phase 3)
+*This is the flow for the Candidate (David) when he opens the app.*
+
+### 4. Pre-Flight Health Check (Public)
+Call this in the lobby to ensure the user's internet can reach the server.
+*   **Method:** `GET /api/health`
+*   **Success (200 OK):** `{"status": "ok", "timestamp": 1709...}`
+
+### 5. Validate 6-Digit Code (Public)
+The candidate types the code from their email.
+*   **Method:** `POST /api/interviews/validate-code`
+*   **Body:** `{"code": "839201"}`
+*   **Success (200 OK):**
+    ```json
+    {
+      "token": "eyJhbGciOi...",  // <--- THE GUEST JWT (Valid for 2 hours)
+      "interviewId": "uuid-9999",
+      "title": "Senior Java Developer",
+      "durationMinutes": 45,
+      "toolsEnabled": { "codeEditor": true }
+    }
+    ```
+*   **Error (404 Not Found):** `{"error": "Invalid or expired access code."}`
+*   **⚠️ FRONTEND NOTE:** Save the `"token"` from this response. You MUST use it for the next two steps!
+
+### 6. Start Interview Lockdown (Requires Guest JWT)
+Call this the exact moment the candidate clicks "Start Interview" to lock the room so no one else can use the code.
+*   **Method:** `PUT /api/interviews/839201/status/active`
+*   **Headers:** `Authorization: Bearer <Guest JWT from Step 5>`
+*   **Success (200 OK):** `{"message": "Interview is now ACTIVE. Lockdown initiated."}`
+*   **Error (409 Conflict):** `{"error": "Cannot start interview. Code is invalid or already active."}`
+
+---
+
+## ⚡ PART C: The WebSocket Data Pipe
+*The real-time streaming engine for Video, Audio, and Code.*
+
+### 7. Connect to the WebSocket
+*   **URL:** `ws://localhost:8080/stream?token=<Guest_JWT_Here>`
+*   **⚠️ FRONTEND NOTE:** Standard HTTP Headers don't work natively in all WS clients. You MUST pass the Guest JWT as a URL query parameter `?token=...`
+
+### 8. Outgoing to Server (Sending at 1 FPS)
+Send this JSON packet every 1 second.
+*   **Payload structure:**
+    ```json
+    {
+      "event": "MEDIA", 
+      "videoFrame": "base64_encoded_jpeg_string_of_the_entire_screen",
+      "audioChunk": "base64_encoded_pcm_audio",
+      "codeEditorText": "public class Main { ... }"
+    }
+    ```
+*   **When Candidate Clicks "Run Code":** Send this to instantly wake up the AI Bug Checker without waiting for the 1-second timer:
+    ```json
+    {
+      "event": "RUN_CODE"
+    }
+    ```
+
+### 9. Incoming from Server (Listen for these!)
+The backend will push JSON commands down the WebSocket to control the UI.
+*   **Highlight an Error in the Editor:**
+    ```json
+    {
+      "type": "TOOL_HIGHLIGHT",
+      "errorLine": 14
+    }
+    ```
+*   **Proctor Cheating Warning (Shake the screen red!):**
+    ```json
+    {
+      "type": "PROCTOR_WARNING",
+      "message": "Please put your smartphone away."
+    }
+    ```
+
+***
+
+
+
