@@ -546,3 +546,88 @@ Allows the recruiter to add their final verdict or notes to the AI's scorecard.
 
 
 
+
+
+
+
+***
+
+# 🎓 Owlyn API Specs - Phase 7 (B2C Educational Modes)
+
+**Base URL:** `http://localhost:8080`
+**Security:** All endpoints in this section are **PUBLIC** (`/api/public/...`). The candidate does not need an account or a recruiter to use these.
+
+---
+
+## 🚀 PART A: Self-Service Session Generation
+*These endpoints act as the "Robot Recruiter". They generate a secure 6-digit room and instantly return the Guest JWT so the user can connect to the WebSocket.*
+
+### 1. Start Configurable Practice (Mock Interview)
+Call this when the candidate wants to simulate a real FAANG interview. The backend will ask Gemini to generate 3 custom questions based on the topic.
+*   **Method:** `POST /api/public/sessions/practice`
+*   **Body:**
+    ```json
+    {
+      "topic": "System Design - Microservices",
+      "difficulty": "Hard",
+      "durationMinutes": 30
+    }
+    ```
+*   **Success (200 OK):**
+    ```json
+    {
+      "token": "eyJhbGciOi...",  // <--- The Guest JWT
+      "interviewId": "uuid-5555...",
+      "accessCode": "482910",
+      "mode": "PRACTICE"
+    }
+    ```
+*   **⚠️ FRONTEND UX RULE:** This is exactly like a real interview. Lock down the OS.
+
+### 2. Start Desktop AI Tutor (Homework Helper)
+Call this when the candidate just wants a friendly AI to look at their screen and help them code/study. No questions are generated.
+*   **Method:** `POST /api/public/sessions/tutor`
+*   **Body:** *(No body required)*
+*   **Success (200 OK):**
+    ```json
+    {
+      "token": "eyJhbGciOi...",  // <--- The Guest JWT
+      "interviewId": "uuid-7777...",
+      "accessCode": "918273",
+      "mode": "TUTOR"
+    }
+    ```
+*   **⚠️ FRONTEND UX RULE:** **Do NOT lock down the OS.** Minimize the Owlyn app to a small widget and use Electron's `desktopCapturer` to stream the candidate's entire monitor so the AI can see their personal IDE or PDF. The backend will automatically turn off the cheating Proctor.
+
+---
+
+## ⚡ PART B: Connecting to the WebSockets
+*   **URL:** `ws://localhost:8080/stream?token=<Guest_JWT_Here>`
+*   Nothing changes here for you! Pass the token exactly like you did in Phase 3. The Java backend will automatically read the `mode` from the database and rewire the AI's brain (Strict vs. Friendly) and toggle the Sentinels on or off natively.
+
+---
+
+## 📊 PART C: The Ephemeral Assessor
+*Because Practice and Tutor sessions are just for learning, the backend **does not** save the final report to the permanent PostgreSQL database. Instead, it holds it in high-speed Redis memory for exactly 15 minutes.*
+
+### 3. Get Ephemeral Report
+Call this **after** the candidate clicks "I'm Done" and the WebSocket closes. 
+*   **Method:** `GET /api/public/reports/{interviewId}`
+*   **Success (200 OK):**
+    ```json
+    {
+      "score": 92,
+      "behavioralNotes": "Great job designing the microservices architecture.",
+      "codeOutput": "Logic was sound, though watch out for edge cases in your API gateway routing.",
+      "behaviorFlags": {
+        "cheating_warnings_count": 0,
+        "details": "None."
+      }
+    }
+    ```
+*   **Error (400 Bad Request):** `{"error": "Report not found or Agent 4 is still generating it. Please wait and retry."}`
+*   **⚠️ FRONTEND UX RULE:** Agent 4 (Gemini 3.1 Pro) takes about 5 to 10 seconds to read the transcript and generate this JSON after the WebSocket closes. If you get a 400 error, show a loading spinner ("AI is grading your session...") and retry every 3 seconds until you get the 200 OK. Once you receive it, **save it to the user's local `localStorage`** so they have a history, because it will vanish from the server in 15 minutes!
+
+***
+
+
