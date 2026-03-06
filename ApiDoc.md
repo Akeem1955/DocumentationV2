@@ -550,6 +550,57 @@ Allows the recruiter to add their final verdict or notes to the AI's scorecard.
 
 
 
+
+
+
+
+
+
+
+# 🦉 Owlyn API Specs - Phase 6 (Recruiter Live Monitor)
+
+This endpoint allows the Admin/Recruiter to securely watch a candidate's interview in real-time. It streams the candidate's exact screen-share, code editor, and live cheating alerts.
+
+### 1. Connect to the Monitor WebSocket
+*   **URL:** `ws://localhost:8080/monitor?interviewId=<UUID>&token=<Admin_JWT>`
+*   **Requirements:** 
+    *   `interviewId`: The UUID of the interview you clicked on in the dashboard.
+    *   `token`: The Recruiter/Admin JWT. If a Candidate tries to use this route, the backend throws a `401 Unauthorized`.
+
+### 2. Incoming from Server (Listen for these!)
+As soon as you connect, the server will start pushing JSON packets to you. You do not need to send anything to the server.
+
+*   **The Live Media Relay (Arrives 1x per second):**
+    Use this to draw the "God View" UI. Put the `videoFrame` in an `<img>` tag and the `codeEditorText` in a read-only Monaco Editor block.
+    ```json
+    {
+      "type": "MEDIA",
+      "videoFrame": "base64_encoded_jpeg_string...",
+      "codeEditorText": "public class Main { ... }",
+      "alertMessage": null
+    }
+    ```
+
+*   **The Live Alert Relay (Arrives instantly on cheating):**
+    When the AI Sentinel catches the candidate cheating, it fires this packet. Show a Toast Notification or a Red Banner on the recruiter's dashboard.
+    ```json
+    {
+      "type": "ALERT",
+      "videoFrame": null,
+      "codeEditorText": null,
+      "alertMessage": "PROCTOR WARNING TRIGGERED: Candidate is looking at a smartphone."
+    }
+    ```
+
+***
+
+
+
+
+
+
+
+
 ***
 
 # 🎓 Owlyn API Specs - Phase 7 (B2C Educational Modes)
