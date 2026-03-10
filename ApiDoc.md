@@ -155,3 +155,86 @@ Call this immediately after a Practice/Tutor session ends (LiveKit disconnects).
 ***
 
 *(Note for Backend Dev: The frontend will need a tiny endpoint like `GET /api/interviews/{id}/monitor-token` so the Recruiter can get a LiveKit token to watch the session. You can build that in 2 minutes by reusing your `LiveKitTokenService`!)*
+
+
+
+
+
+
+
+
+***
+
+# 🦉 Owlyn API Specs - ATS & Dashboard Updates
+
+Hey Frontend Team! Based on your requests, the backend has been upgraded with highly-optimized database queries and new fields to support your ATS features natively.
+
+---
+
+## 📊 PART A: The Talent Pool (Bulk Reports)
+*These endpoints allow you to build the recruiter dashboard without looping through massive arrays in JavaScript.*
+
+### 1. Get All Workspace Reports (The Talent Pool)
+Fetches every completed interview report for the logged-in recruiter's company.
+*   **Method:** `GET /api/reports`
+*   **Headers:** `Authorization: Bearer <Admin/Recruiter JWT>`
+*   **Success (200 OK):**
+    ```json[
+      {
+        "reportId": "uuid-8888...",
+        "interviewId": "uuid-9999...",
+        "candidateEmail": "839201",
+        "score": 85,
+        "behavioralNotes": "Good communication.",
+        "codeOutput": "Optimized logic.",
+        "behaviorFlags": { "cheating_warnings_count": 0 },
+        "humanFeedback": null,
+        "finalDecision": "PENDING" 
+      },
+      // ... more reports
+    ]
+    ```
+
+### 2. Get Top Performer (Optimized DB Query)
+Do not calculate this on the frontend! Call this endpoint to instantly get the absolute highest-scoring candidate for your company.
+*   **Method:** `GET /api/reports/top`
+*   **Headers:** `Authorization: Bearer <Admin/Recruiter JWT>`
+*   **Success (200 OK):** Returns a single Report object (same schema as above).
+*   **Error (400 Bad Request):** `{"error": "No reports found for this workspace."}` (Handle this gracefully if the company is brand new).
+
+---
+
+## ⚖️ PART B: The Hiring Decision
+
+### 3. Add Feedback & Final Decision
+We have upgraded the feedback endpoint. You can now pass a definitive HIRE or DECLINE state alongside the text notes.
+*   **Method:** `POST /api/reports/{interviewId}/feedback`
+*   **Headers:** `Authorization: Bearer <Admin/Recruiter JWT>`
+*   **Body:**
+    ```json
+    {
+      "humanFeedback": "Reviewed the AI flag. Candidate is solid. Proceeding to offer.",
+      "decision": "HIRE" 
+    }
+    ```
+    *(Note: Valid `decision` strings are `"HIRE"`, `"DECLINE"`, or `"PENDING"`)*.
+*   **Success (200 OK):** Returns the fully updated Report object.
+*   **⚠️ FRONTEND UX RULE:** Tie your HIRE/DECLINE toggle buttons directly to this endpoint.
+
+### 4. Fetch Single Report (Updated)
+When you fetch a single report via `GET /api/reports/{interviewId}`, it will now include the `"finalDecision"` field in the root of the JSON response so you can pre-fill your toggle buttons!
+
+---
+
+## 🤖 PART C: Persona Management Update
+
+### 5. Delete AI Persona
+*   **Method:** `DELETE /api/personas/{id}`
+*   **Headers:** `Authorization: Bearer <Admin/Recruiter JWT>`
+*   **Success (200 OK):** `{"message": "Persona successfully deleted."}`
+*   **Error (400 Bad Request):** `{"error": "Cannot delete this Persona because it is currently attached to existing interviews."}`
+*   **⚠️ FRONTEND UX RULE:** If you get the 400 error, you MUST show it in a Toast/Alert. It means the database is blocking the deletion to prevent corrupting past interview records. 
+
+***
+
+Send this their way. Your ATS dashboard is going to be incredibly fast and bug-free!
