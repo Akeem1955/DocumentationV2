@@ -1,3 +1,145 @@
+
+let's go win this hackathon!
+
+***
+
+# 🦉 OWLYN — The Master Architecture & Frontend Bible (LiveKit Edition)
+
+> **Deadline**: Mar 16, 2026  
+> **Core Stack**: Electron (Frontend), Java/Spring Boot (Control Plane), Python Worker (LiveKit AI Data Plane), Gemini 3.1 Pro & 3.0 Flash  
+> **🚨 MAJOR ARCHITECTURE PIVOT:** We have completely abandoned custom WebSockets. We are now using **LiveKit** (True WebRTC) for flawless, ultra-low latency audio/video, and a Python worker to orchestrate the AI. 
+
+---
+
+## 🏛️ Architecture Overview — The Microservice Split
+
+### The Roles
+| Component | Role | Description |
+|-----------|------|-------------|
+| **Java Spring Boot** | *The Command Center* | Handles Auth, JWTs, Database (Postgres), AI Copilot (`/api/copilot`), generates LiveKit Room Tokens, and uses Agent 4 (Gemini 3.1 Pro) to generate final JSON ATS reports. |
+| **LiveKit Cloud** | *The WebRTC Router* | Replaces our custom WebSockets. Handles ultra-low latency routing of the candidate's audio, video, screen-share tracks, and JSON data payloads. |
+| **Python Worker** | *The AI Data Plane* | Connects silently to the LiveKit room. Uses `livekit-agents` to run Agent 2 (Voice) and Agent 3 (The Dual Sentinels). |
+| **Electron App** | *The Senses* | Uses `@livekit/components-react` to publish the candidate's microphone, a webcam track, and a screen-share track. |
+
+---
+
+## 💡 CRITICAL: The "Visual Compiler" (How the AI actually works)
+**FRONTEND TEAM, PLEASE READ THIS CAREFULLY:** 
+The AI does **NOT** run or execute the candidate's Java/Python code in a backend sandbox. Do not build remote execution environments. 
+
+The AI acts as a **"Visual Compiler"**. 
+Every second, our Python worker takes the 1FPS screen-share video track you published via LiveKit. It feeds that image to Gemini 3.0 Flash Vision. Gemini physically *reads the code off the image* and uses its massive LLM reasoning to mentally trace the logic and find bugs. Simultaneously, a separate Sentinel watches the Webcam track to catch cheating.
+
+---
+
+## ⚡ The LiveKit Frontend Cheat Sheet
+*Because we dropped WebSockets, here is exactly how you handle real-time data in React/Electron.*
+
+**1. Connecting to the Room**
+When you call `POST /api/interviews/validate-code`, Java will return a `livekitToken`. Use the `@livekit/components-react` package to wrap your interview workspace in a `<LiveKitRoom token={livekitToken} serverUrl="wss://your-livekit-url">`.
+
+**2. Separated Media Capture (Video, Screen & Audio)**
+You must publish **THREE** separate tracks to LiveKit simultaneously. Do not combine them!
+*   **AudioTrack:** The candidate's microphone.
+*   **CameraTrack:** A standard webcam feed (Face only). Configure this to **1 Frame Per Second (1 FPS)** to save bandwidth. The AI uses this for Proctoring.
+*   **ScreenShareTrack:** Capture the Monaco editor/whiteboard (or their whole desktop in Tutor mode). Configure this to **1 FPS** as well. The AI uses this to read the code.
+
+**3. Sending Commands to the AI (DataChannels)**
+To instantly wake up the AI when the user clicks "Run Code", do not use REST APIs. Use LiveKit's `useLocalParticipant()` to publish a message to the Data Channel:
+*   *Frontend Sends:* `{"event": "RUN_CODE"}` (Encode as byte array/string). The Python worker will catch this and instantly analyze the code on screen.
+
+**4. Receiving Commands from the AI (DataChannels)**
+Listen to the room's Data Channel (`RoomEvent.DataReceived`). The Python AI will send JSON commands to control your UI:
+*   *If Payload is:* `{"type": "PROCTOR_WARNING", "message": "Put your phone away"}` ➡️ **Action:** Shake the UI red and show a toast.
+*   *If Payload is:* `{"type": "TOOL_HIGHLIGHT", "line": 14}` ➡️ **Action:** Tell Monaco Editor to highlight line 14.
+
+**5. AI Voice Playback**
+You don't have to queue base64 audio chunks anymore! Just render LiveKit's `<AudioTrack>` or `<RoomAudioRenderer />` component, and when the AI speaks, LiveKit plays it natively with zero latency.
+
+---
+
+## 🚀 PHASE-BY-PHASE IMPLEMENTATION GUIDE
+
+### PHASE 3 — Candidate Gateway & Lockdown
+*   **F3.1 — Candidate Code Entry:** Input 6-digit code → Call `POST /api/interviews/validate-code` → Save `token` (Guest JWT) and `livekitToken`.
+*   **F3.3 — Pre-Flight Lobby:** Test Mic, Camera, and Network.
+*   **F3.4 — Lockdown:** On "Start Interview", trigger `win.setContentProtection(true)` to block OBS/Screen Recorders. Block `Alt+Tab`. Go Fullscreen Kiosk. Call Java `PUT /api/interviews/{code}/status/active` to lock the DB.
+*   **F3.5 — Connect:** Join the LiveKit Room and publish the 3 tracks.
+
+### PHASE 4 — Interview Workspace UI
+*   **F4.1 — Layout:** Timer, Monaco Editor, Whiteboard, LiveKit Audio Visualizer (to show when AI is speaking).
+*   **F4.2 — AI Copilot:** When the user stops typing for 1.5 seconds, grab the code text and cursor position. Call `POST /api/copilot` (using the Guest JWT). Display the returned `suggestion` as ghost text.
+
+### PHASE 5 — The Python AI Worker (Backend Only)
+*(Handled entirely by the Backend Team. The Python worker connects to LiveKit, runs the Dual Sentinels, injects warnings into the Voice AI, and sends the final transcript to Java when the room closes).*
+
+### PHASE 6 — ATS Updates & Recruiter God-View
+*   **I6.1 — The Recruiter Monitor:** When Amina clicks "Watch Live", call `GET /api/interviews/{id}/monitor-token`. Connect to LiveKit using this token. It grants "Subscriber Only" access so the recruiter can watch the candidate's screen-share and hear the audio natively without being seen!
+*   **I6.2 — Top Performer Card:** Call `GET /api/reports/top` to get the highest scoring candidate instantly.
+*   **I6.3 — HIRE/DECLINE Toggle:** Call `POST /api/reports/{id}/feedback` and pass `{"decision": "HIRE"}` to sync state with the database.
+
+### PHASE 7 — Stretch Goals (Tutor Mode & Practice)
+*   **Tutor Mode Difference:** Call `POST /api/public/sessions/tutor`. **DO NOT lock down the OS.** Minimize Owlyn to a small widget. Use Electron's `desktopCapturer` to stream the candidate's *entire monitor* so the AI can see their personal VS Code or PDF. The Python AI automatically turns off the Proctor and becomes a friendly tutor.
+*   **Ephemeral Reports:** For Practice/Tutor modes, call `GET /api/public/reports/{id}` after the LiveKit room closes. Save the JSON response to `localStorage` because the backend will delete it after 15 minutes!
+
+---
+
+## 📚 THE MASTER REST API REFERENCE
+
+### 🔐 Auth & Security (Public)
+*   `POST /api/auth/signup` & `POST /api/auth/login` ➡️ Send OTP.
+*   `POST /api/auth/verify-login?otp=...&email=...` ➡️ Returns `{ "token": "..." }`.
+*   `GET /api/auth/me` ➡️ Session check.
+
+### 🏢 Workspaces & ATS Dashboards (Admin/Recruiter)
+*   `GET /api/workspace/members` ➡️ List all recruiters.
+*   `POST /api/workspace/invite` ➡️ Returns a temporary password for the new recruiter in the JSON response!
+*   `GET /api/reports` ➡️ The Talent Pool. Returns all completed interview reports.
+*   `GET /api/reports/top` ➡️ Returns the single highest-scoring report.
+*   `POST /api/reports/{id}/feedback` ➡️ Body: `{"humanFeedback": "...", "decision": "HIRE"}`. (Decision can be HIRE, DECLINE, or PENDING).
+
+### 🤖 AI Personas (Admin/Recruiter)
+*   `GET /api/personas` ➡️ List saved personas.
+*   `DELETE /api/personas/{id}` ➡️ Delete persona. (Will return 400 Bad Request if attached to an interview).
+*   `POST /api/personas` ➡️ Use `FormData`. Append JSON to `"persona"` and file (PDF/DOCX) to `"file"`.
+
+### 🎙️ The Interview Setup (Admin/Recruiter)
+*   `POST /api/interviews/generate-questions` ➡️ Ask Gemini to draft questions.
+*   `POST /api/interviews` ➡️ Body: `{"personaId": "...", "generatedQuestions": "..."}`. Returns the 6-digit `accessCode`.
+*   `GET /api/interviews/{id}/monitor-token` ➡️ Returns the `livekitToken` so the Recruiter can watch the Live God-View.
+
+### 🚪 Candidate Gateway (Public)
+*   `POST /api/interviews/validate-code` ➡️ Returns `token` (Guest JWT) and `livekitToken` (WebRTC).
+*   `PUT /api/interviews/{code}/status/active` ➡️ Locks the room.
+*   `POST /api/copilot` ➡️ Generates Monaco autocomplete ghost text.
+
+### 🎓 B2C Educational Modes (Public)
+*   `POST /api/public/sessions/practice` ➡️ Auto-generates mock interview, returns LiveKit tokens.
+*   `POST /api/public/sessions/tutor` ➡️ Starts Homework Helper mode, returns LiveKit tokens.
+*   `GET /api/public/reports/{id}` ➡️ Fetches Ephemeral JSON Scorecard (Store in localStorage!).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # OWLYN — 19-Day Hackathon Execution Plan
 
 > **Start**: Feb 26, 2026 → **Deadline**: Mar 16, 2026  
@@ -262,128 +404,5 @@ It is Monday evening, and you have exactly one week left. Pivoting to LiveKit + 
 To clear up the confusion with your frontend developer, we need to completely rewrite the execution plan to reflect the **Microservice Pivot (Java Control Plane + Python/LiveKit Data Plane)** and the **Visual Compiler Pivot (No execution sandboxes, just AI vision)**.
 
 Here is the officially updated, copy-pasteable execution plan. Send this directly to your team so everyone is on the exact same page for the final 7 days.
-
-***
-
-# OWLYN — Updated Hackathon Execution Plan (LiveKit + Python Pivot)
-
-> **Deadline**: Mar 16, 2026  
-> **Core Stack**: Electron (Frontend), Java/Spring Boot (Control Plane), Python Worker (LiveKit AI Data Plane), Gemini 3.1 Pro & 3.0 Flash  
-> **Architecture Pivot**: We have abandoned custom WebSockets. We are now using **LiveKit** (True WebRTC) for flawless, ultra-low latency audio/video, and a Python worker to orchestrate the Live Gemini Agents.
-
----
-
-## Architecture Overview — The Microservice Split
-
-### The Roles
-| Component | Role | Description |
-|-----------|------|-------------|
-| **Java Spring Boot** | *The Command Center* | Handles Auth, JWTs, Database (Postgres), AI Copilot (`/api/copilot`), generates LiveKit Room Tokens, and uses Agent 4 (Gemini 3.1 Pro) to generate final JSON reports. |
-| **LiveKit Cloud** | *The WebRTC Router* | Replaces our WebSockets. Handles ultra-low latency routing of the candidate's audio and screen-share tracks. |
-| **Python Worker** | *The AI Data Plane* | Connects to the LiveKit room. Uses `livekit-agents` and Google GenAI SDK to run Agent 2 (Voice) and Agent 3 (The Dual Sentinels). |
-| **Electron App** | *The Senses* | Uses `@livekit/components-react` to publish the microphone and a **Unified Screen-Share** (recording the entire app window containing the face + code). |
-
----
-
-## PHASE 3 — Candidate Experience & Pre-Interview
-
-### Frontend Tasks (Updated for LiveKit)
-**F3.1 — Candidate Code Entry Screen**
-*   Input field for 6-digit code.
-*   On submit: call `POST /api/interviews/validate-code` with `{code}`.
-*   If valid → backend returns a Guest JWT **AND a LiveKit Access Token**.
-
-**F3.2 — Practice Interview Entry**
-*   Bypasses code validation. Calls `POST /api/public/sessions/practice`.
-*   Backend generates a mock interview and returns the LiveKit token.
-
-**F3.3 — Pre-Flight Lobby**
-*   Check Camera & Mic.
-*   Network Check: Ensure connection to LiveKit Cloud is stable.
-
-**F3.4 — Lockdown Execution**
-*   Fullscreen, kiosk mode, block `Alt+Tab`. OS-Level DRM `setContentProtection(true)` to block OBS/screen recorders.
-
-**F3.5 — Connect to LiveKit (NO MORE WEBSOCKETS)**
-*   Instead of opening a WSS to Java, use the `@livekit/components-react` SDK to connect to the LiveKit Room using the token received in F3.1.
-
-**F3.6 — Unified Media Capture**
-*   **CRITICAL CHANGE:** Do not capture the webcam and code separately. Use Electron's `desktopCapturer` to capture the **entire Owlyn app window** (Face on the left, code on the right).
-*   Publish this video track (1fps) and the microphone audio track to the LiveKit room natively. 
-
-### Backend Tasks (Java — Control Plane)
-**B3.1 — LiveKit Token Generation**
-*   Update `validate-code` endpoint. Use the `livekit-server-sdk-java` to generate a secure Room Token for the candidate. Return it alongside the Guest JWT.
-
-**B3.2 — Status Lockdown**
-*   `PUT /api/interviews/{code}/status/active` to lock the room in Postgres.
-
----
-
-## PHASE 4 — Interview Workspace UI
-
-### Frontend Tasks
-**F4.1 — Workspace Layout**
-*   Header Bar (Timer), Main Area (Monaco Editor, Whiteboard), Sidebar (LiveKit Audio Visualizer).
-
-**F4.2 — Monaco Editor Setup & Copilot**
-*   Install `monaco-editor`.
-*   Implement `registerInlineCompletionsProvider`: pause typing for 1.5s → call Java backend `POST /api/copilot` → display ghost text.
-
-**F4.3 — AI Voice Playback**
-*   Handled entirely by LiveKit's `<AudioTrack>` component! No more manual base64 PCM queuing!
-
-**F4.4 — LiveKit Data Channels (UI Commands)**
-*   Listen to the LiveKit DataChannel. If the Python worker sends `{"type": "PROCTOR_WARNING", "message": "..."}`, show the red banner. If it sends `{"type": "TOOL_HIGHLIGHT", "line": 14}`, highlight the code.
-
----
-
-## PHASE 5 — The Python AI Worker (The Live Intelligence)
-
-> **CRITICAL CLARIFICATION FOR FRONTEND:** The AI does **NOT** run or execute the candidate's code in a sandbox. The AI acts as a **"Visual Compiler"**. It physically reads the 1fps screen-share image and uses its massive LLM reasoning to mentally trace the logic and find bugs.
-
-### Backend Tasks (Python Worker)
-**B5.1 — The LiveKit Agent Connects**
-*   A Python script running `livekit-agents` connects to the room when the candidate joins.
-
-**B5.2 — Agent 2 (The Voice / Master Interviewer)**
-*   Runs Gemini Live API in BIDI mode. 
-*   Prompt: *"You are Owlyn, the interviewer. Ask the pre-approved questions."*
-*   Receives the candidate's audio track natively via LiveKit and speaks back.
-
-**B5.3 — Agent 3 (The Dual Sentinels - Background Tasks)**
-*   While Agent 2 talks, Python runs two `async` background loops inspecting the LiveKit video track (the screen-share):
-    *   **Sentinel A (Proctor):** Looks at the left side of the image. *"Is there a phone? Are they looking away?"*
-    *   **Sentinel B (Smart Workspace):** Looks at the code on the right side. *"Is there an infinite loop or syntax error?"* (It acts as a Visual Compiler).
-
-**B5.4 — The Yield (Agent Injection)**
-*   If Sentinel B sees a missing semicolon on line 14, it injects a system message into Agent 2's brain.
-*   Agent 2 interrupts the candidate and speaks: *"David, check line 14, you missed a semicolon."*
-*   Simultaneously, Python sends a DataChannel message to the frontend to highlight line 14 in red.
-
-**B5.5 — The Handback (Agent 4 Assessor)**
-*   When the LiveKit room closes, Python packages the entire transcript and POSTs it to the Java Backend: `POST /api/internal/reports/trigger`.
-*   Java takes the transcript, calls Agent 4 (Gemini 3.1 Pro), generates the JSON scorecard, and saves it to Postgres.
-
----
-
-## PHASE 6 — Full Integration & Recruiter God-View
-
-**I6.1 — The Recruiter Monitor (Zero Backend Effort!)**
-*   Because we use LiveKit, the Recruiter Dashboard doesn't need a custom WebSocket relay.
-*   When Amina clicks "Watch Live", the Java backend generates a **LiveKit Token with hidden/subscriber privileges**. Amina's frontend connects to the LiveKit room and simply watches the candidate's screen-share track and listens to the audio natively!
-
-**I6.2 — The Pitch Script (Updated)**
-> *"We built an enterprise-grade, distributed AI architecture. Our Control Plane is Java Spring Boot, handling zero-trust security and structured JSON grading via Gemini 3.1 Pro. Our Data Plane leverages LiveKit WebRTC and a Python Worker to orchestrate a Concurrent Multi-Agent system. Instead of hacking together slow code execution sandboxes, we use Gemini 3.0 Flash as a 'Visual Compiler'. Two background AI Sentinels silently analyze 1fps desktop screen-shares for cheating and logical bugs, whispering their findings into the ear of our Master Voice AI, which guides the candidate in real-time with sub-second latency."*
-
----
-
-## PHASE 7 — Stretch Goals (Tutor Mode)
-
-**Tutor Mode Architecture:**
-*   Frontend: Don't lock down the OS. Use Electron `desktopCapturer` to share the user's entire desktop (so they can use VS Code). Publish to LiveKit.
-*   Java Backend: Flags the room as `TUTOR`. 
-*   Python Worker: Reads the flag. **Turns OFF the Proctor Sentinel.** Changes Agent 2's prompt to: *"You are a friendly, patient human tutor looking at my screen."*
-*   The Visual Compiler (Sentinel B) remains ON to catch bugs in the user's IDE.
 
 ***
