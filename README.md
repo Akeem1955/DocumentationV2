@@ -251,442 +251,139 @@ All endpoints require JWT role = `ADMIN`. Return `403 Forbidden` for RECRUITER.
 | 9 | 6-digit code is unique — no collisions with active interviews | ☐ |
 | 10 | Monitoring page skeleton loads (placeholders OK) | ☐ |
 
----
 
-## PHASE 3 — Candidate Experience & Pre-Interview (Days 7–9: Mar 4–6)
 
-**Checkpoint Deadline: Mar 6 EOD**
 
-> Whether the candidate enters a 6-digit code for a real interview, or launches Practice Mode, the execution logic is exactly the same. The only difference is where the final report goes.
 
-### Interview Flow
 
-```
-[ ENTER 6-DIGIT CODE ] (or "Practice Mode")
-         ↓
-[ PRE-FLIGHT LOBBY ] → Check Camera, Mic, Network
-         ↓
-[ INITIATE LOCKDOWN ] → Kiosk Mode, Block Shortcuts, DRM Content Protection
-         ↓
-[ CONNECT TO CLOUD ] → Electron opens WSS to Java Cloud Server
-         ↓
-[ LIVE INTERVIEW ] → AI talks, User codes in Monaco, AI monitors
-```
+
+It is Monday evening, and you have exactly one week left. Pivoting to LiveKit + Python for the live session is the ultimate strategic move because it completely eliminates WebSocket latency issues and lets you use Google's native Python streaming patterns. 
+
+To clear up the confusion with your frontend developer, we need to completely rewrite the execution plan to reflect the **Microservice Pivot (Java Control Plane + Python/LiveKit Data Plane)** and the **Visual Compiler Pivot (No execution sandboxes, just AI vision)**.
+
+Here is the officially updated, copy-pasteable execution plan. Send this directly to your team so everyone is on the exact same page for the final 7 days.
+
+***
+
+# OWLYN — Updated Hackathon Execution Plan (LiveKit + Python Pivot)
+
+> **Deadline**: Mar 16, 2026  
+> **Core Stack**: Electron (Frontend), Java/Spring Boot (Control Plane), Python Worker (LiveKit AI Data Plane), Gemini 3.1 Pro & 3.0 Flash  
+> **Architecture Pivot**: We have abandoned custom WebSockets. We are now using **LiveKit** (True WebRTC) for flawless, ultra-low latency audio/video, and a Python worker to orchestrate the Live Gemini Agents.
 
 ---
+
+## Architecture Overview — The Microservice Split
+
+### The Roles
+| Component | Role | Description |
+|-----------|------|-------------|
+| **Java Spring Boot** | *The Command Center* | Handles Auth, JWTs, Database (Postgres), AI Copilot (`/api/copilot`), generates LiveKit Room Tokens, and uses Agent 4 (Gemini 3.1 Pro) to generate final JSON reports. |
+| **LiveKit Cloud** | *The WebRTC Router* | Replaces our WebSockets. Handles ultra-low latency routing of the candidate's audio and screen-share tracks. |
+| **Python Worker** | *The AI Data Plane* | Connects to the LiveKit room. Uses `livekit-agents` and Google GenAI SDK to run Agent 2 (Voice) and Agent 3 (The Dual Sentinels). |
+| **Electron App** | *The Senses* | Uses `@livekit/components-react` to publish the microphone and a **Unified Screen-Share** (recording the entire app window containing the face + code). |
+
+---
+
+## PHASE 3 — Candidate Experience & Pre-Interview
+
+### Frontend Tasks (Updated for LiveKit)
+**F3.1 — Candidate Code Entry Screen**
+*   Input field for 6-digit code.
+*   On submit: call `POST /api/interviews/validate-code` with `{code}`.
+*   If valid → backend returns a Guest JWT **AND a LiveKit Access Token**.
+
+**F3.2 — Practice Interview Entry**
+*   Bypasses code validation. Calls `POST /api/public/sessions/practice`.
+*   Backend generates a mock interview and returns the LiveKit token.
+
+**F3.3 — Pre-Flight Lobby**
+*   Check Camera & Mic.
+*   Network Check: Ensure connection to LiveKit Cloud is stable.
+
+**F3.4 — Lockdown Execution**
+*   Fullscreen, kiosk mode, block `Alt+Tab`. OS-Level DRM `setContentProtection(true)` to block OBS/screen recorders.
+
+**F3.5 — Connect to LiveKit (NO MORE WEBSOCKETS)**
+*   Instead of opening a WSS to Java, use the `@livekit/components-react` SDK to connect to the LiveKit Room using the token received in F3.1.
+
+**F3.6 — Unified Media Capture**
+*   **CRITICAL CHANGE:** Do not capture the webcam and code separately. Use Electron's `desktopCapturer` to capture the **entire Owlyn app window** (Face on the left, code on the right).
+*   Publish this video track (1fps) and the microphone audio track to the LiveKit room natively. 
+
+### Backend Tasks (Java — Control Plane)
+**B3.1 — LiveKit Token Generation**
+*   Update `validate-code` endpoint. Use the `livekit-server-sdk-java` to generate a secure Room Token for the candidate. Return it alongside the Guest JWT.
+
+**B3.2 — Status Lockdown**
+*   `PUT /api/interviews/{code}/status/active` to lock the room in Postgres.
+
+---
+
+## PHASE 4 — Interview Workspace UI
 
 ### Frontend Tasks
+**F4.1 — Workspace Layout**
+*   Header Bar (Timer), Main Area (Monaco Editor, Whiteboard), Sidebar (LiveKit Audio Visualizer).
 
-#### F3.1 — Candidate Code Entry Screen
-- Input field for 6-digit code (numeric only)
-- On submit: call `POST /api/interviews/validate-code` with `{code}`
-- If invalid → show error "Invalid access code"
-- If valid → navigate to Pre-Flight Lobby
+**F4.2 — Monaco Editor Setup & Copilot**
+*   Install `monaco-editor`.
+*   Implement `registerInlineCompletionsProvider`: pause typing for 1.5s → call Java backend `POST /api/copilot` → display ghost text.
 
-#### F3.2 — Practice Interview Entry
-- "Practice Interview" bypasses code validation
-- Same workspace UI, same AI interview, but with "PRACTICE MODE" banner
-- **Report routing**: Agent 4 still generates the structured JSON feedback, but instead of saving to Cloud SQL (recruiter-visible), it is returned directly to the Electron frontend so the candidate sees a **"Your Mock Interview Feedback"** screen with their score, behavioral notes, and code quality. Nothing is saved to the database.
+**F4.3 — AI Voice Playback**
+*   Handled entirely by LiveKit's `<AudioTrack>` component! No more manual base64 PCM queuing!
 
-#### F3.3 — Pre-Flight Lobby
-- **Camera preview**: display live `<video>` so candidate can adjust lighting/position
-- **System checks** — run sequentially with real-time status indicators (✅ / ❌):
-  - ✅ Camera Working — request `getUserMedia({ video: true })`, show preview
-  - ✅ Microphone Working — request `getUserMedia({ audio: true })`, verify audio level above threshold
-  - ✅ Internet Stable — `fetch('/api/health')`, verify latency < 2 seconds
-- All checks pass → enable **"I am ready — Start Interview"** button
-- Do NOT auto-start. Candidate must click manually.
-
-#### F3.4 — Lockdown Execution
-On "Start Interview" click:
-- Set `BrowserWindow` to fullscreen, kiosk, alwaysOnTop (screen-saver level), non-closable, non-minimizable
-- Register `globalShortcut` to intercept: Ctrl+Tab, Alt+Tab, Escape, Alt+F4, Ctrl+W, Ctrl+Q, Meta+Tab
-- **OS-Level Screen Capture Blocking**: trigger `win.setContentProtection(true)` — this uses the OS's native DRM (Display Affinity) to force any screen recording software (OBS, Discord, WebRTC) to capture a completely black screen. Zero process scanning required.
-- **Environment breach detection**: listen for `blur` event on the window. If app loses focus, log an "ENVIRONMENT_BREACH" event, force window back to focus, and send breach warning to the cloud server
-
-#### F3.5 — Connect to Cloud & Stream
-After lockdown is active:
-1. **Open WSS connection** to Java Cloud Server (e.g., `wss://api.yourdomain.com/stream`) and begin streaming media
-2. Authenticate the WSS connection using the JWT token
-
-#### F3.6 — Media Capture & Streaming
-- Capture webcam at 1fps as Base64 JPEG (640×480, quality 0.7)
-- Capture microphone at 16kHz mono PCM, convert Float32 → Int16
-- Stream both continuously over the WSS connection to the **Java Cloud Server**
-- Listen on the same WSS for incoming audio from Gemini (via Java) and play it through speakers at 24kHz
-
-#### F3.7 — Downstream Event Handler
-- When the Java server sends Gemini's voice audio → play it through speakers
-- When the Java server sends text → append to transcript sidebar
-- When the Java server sends proctor alerts → show full-width red warning banner with shake animation, log in behavior log
+**F4.4 — LiveKit Data Channels (UI Commands)**
+*   Listen to the LiveKit DataChannel. If the Python worker sends `{"type": "PROCTOR_WARNING", "message": "..."}`, show the red banner. If it sends `{"type": "TOOL_HIGHLIGHT", "line": 14}`, highlight the code.
 
 ---
 
-### Backend Tasks (Spring Boot — Cloud)
+## PHASE 5 — The Python AI Worker (The Live Intelligence)
 
-#### B3.1 — Interview State Tracking
-- `PUT /api/interviews/{code}/status` — when candidate clicks "Start", Electron calls this to set status from `UPCOMING` to `ACTIVE`. This prevents the 6-digit code from being used on another machine.
+> **CRITICAL CLARIFICATION FOR FRONTEND:** The AI does **NOT** run or execute the candidate's code in a sandbox. The AI acts as a **"Visual Compiler"**. It physically reads the 1fps screen-share image and uses its massive LLM reasoning to mentally trace the logic and find bugs.
 
-#### B3.2 — WebSocket Endpoint for Electron Media Stream
-- Expose a secure WebSocket endpoint (e.g., `/stream`) that accepts incoming media from Electron
-- Authenticate the connection using the JWT token (passed as query param or first message)
-- Receive Base64 JPEG frames and PCM audio chunks
-- Forward them directly into the Gemini 2.5 Live API session via the ADK (Phase 5 wires this up)
+### Backend Tasks (Python Worker)
+**B5.1 — The LiveKit Agent Connects**
+*   A Python script running `livekit-agents` connects to the room when the candidate joins.
 
-#### B3.3 — Health Check Endpoint
-- `GET /api/health` → returns `{status: "ok", timestamp}` (no auth required)
+**B5.2 — Agent 2 (The Voice / Master Interviewer)**
+*   Runs Gemini Live API in BIDI mode. 
+*   Prompt: *"You are Owlyn, the interviewer. Ask the pre-approved questions."*
+*   Receives the candidate's audio track natively via LiveKit and speaks back.
 
----
+**B5.3 — Agent 3 (The Dual Sentinels - Background Tasks)**
+*   While Agent 2 talks, Python runs two `async` background loops inspecting the LiveKit video track (the screen-share):
+    *   **Sentinel A (Proctor):** Looks at the left side of the image. *"Is there a phone? Are they looking away?"*
+    *   **Sentinel B (Smart Workspace):** Looks at the code on the right side. *"Is there an infinite loop or syntax error?"* (It acts as a Visual Compiler).
 
-### ✅ Phase 3 Checkpoint
+**B5.4 — The Yield (Agent Injection)**
+*   If Sentinel B sees a missing semicolon on line 14, it injects a system message into Agent 2's brain.
+*   Agent 2 interrupts the candidate and speaks: *"David, check line 14, you missed a semicolon."*
+*   Simultaneously, Python sends a DataChannel message to the frontend to highlight line 14 in red.
 
-| # | Check | Pass? |
-|---|-------|-------|
-| 1 | Candidate enters valid code → proceeds to Pre-Flight Lobby | ☐ |
-| 2 | Invalid code shows error, blocks entry | ☐ |
-| 3 | Camera preview shows in lobby, all 3 system checks run | ☐ |
-| 4 | Failed check disables "Start Interview" button | ☐ |
-| 5 | Kiosk mode activates: fullscreen, shortcuts blocked, always on top | ☐ |
-| 6 | Focus loss triggers environment breach warning | ☐ |
-| 7 | Electron opens WSS to Java cloud and begins streaming media | ☐ |
-| 8 | Spring Boot marks interview as ACTIVE when started | ☐ |
-| 9 | Practice mode works without a code, same workflow | ☐ |
+**B5.5 — The Handback (Agent 4 Assessor)**
+*   When the LiveKit room closes, Python packages the entire transcript and POSTs it to the Java Backend: `POST /api/internal/reports/trigger`.
+*   Java takes the transcript, calls Agent 4 (Gemini 3.1 Pro), generates the JSON scorecard, and saves it to Postgres.
 
 ---
 
-## PHASE 4 — Interview Workspace UI (Days 10–12: Mar 7–9)
+## PHASE 6 — Full Integration & Recruiter God-View
 
-**Checkpoint Deadline: Mar 9 EOD**
+**I6.1 — The Recruiter Monitor (Zero Backend Effort!)**
+*   Because we use LiveKit, the Recruiter Dashboard doesn't need a custom WebSocket relay.
+*   When Amina clicks "Watch Live", the Java backend generates a **LiveKit Token with hidden/subscriber privileges**. Amina's frontend connects to the LiveKit room and simply watches the candidate's screen-share track and listens to the audio natively!
 
-### Frontend Tasks
-
-#### F4.1 — Interview Workspace Layout
-Full-screen workspace with panels:
-- **Header Bar**: Timer (countdown from session duration, warns at 5 min and 1 min), Status badge, "End Interview" button
-- **Main Area**: Tabbed interface — Code (Monaco Editor), Whiteboard (HTML5 Canvas with pen/eraser/colors), Notes (auto-saving textarea)
-- **Right Sidebar**: Small camera preview (160×120, bottom-right), AI Voice Indicator (pulsing dot when AI speaks), Transcript area
-
-#### F4.2 — Monaco Editor Setup
-- Install `monaco-editor` npm package
-- Default language: Java. Support switching to Python, JavaScript
-- The candidate writes code here
-- Add a **"Run / Review Workspace"** button. On click, Electron packages the current Monaco editor text, the Notes text, and the Whiteboard (as a Base64 image) and sends it to the Java Cloud Server via WSS
-- Implement `registerInlineCompletionsProvider` for AI-assisted code completion: when the user stops typing for 1.5 seconds, call `POST /api/copilot` to fetch "ghost text" predictions and display them inline
-
-#### F4.3 — AI Voice Playback
-- Queue incoming PCM audio chunks to avoid overlap
-- Show pulsing animation when AI is speaking
-- Show transcript of AI speech in sidebar
-
-#### F4.4 — Proctor Warning UI
-- When Java sends proctor alerts via WSS: display full-width red banner ("⚠️ Warning: Please focus on your interview"), brief shake animation, log the warning in a hidden behavior log
+**I6.2 — The Pitch Script (Updated)**
+> *"We built an enterprise-grade, distributed AI architecture. Our Control Plane is Java Spring Boot, handling zero-trust security and structured JSON grading via Gemini 3.1 Pro. Our Data Plane leverages LiveKit WebRTC and a Python Worker to orchestrate a Concurrent Multi-Agent system. Instead of hacking together slow code execution sandboxes, we use Gemini 3.0 Flash as a 'Visual Compiler'. Two background AI Sentinels silently analyze 1fps desktop screen-shares for cheating and logical bugs, whispering their findings into the ear of our Master Voice AI, which guides the candidate in real-time with sub-second latency."*
 
 ---
 
-### Backend Tasks (Spring Boot — Cloud)
-
-#### B4.1 — Copilot Endpoint
-- `POST /api/copilot` — receives `{code, language, cursorPosition}`, uses a standard Gemini 2.5 Flash `generateContent` call to generate inline code completion suggestions, returns `{suggestion}`
-
----
-
-### ✅ Phase 4 Checkpoint
-
-| # | Check | Pass? |
-|---|-------|-------|
-| 1 | Workspace UI renders with Code, Whiteboard, Notes tabs | ☐ |
-| 2 | Camera preview shows in corner | ☐ |
-| 3 | Monaco editor loads and accepts code input | ☐ |
-| 4 | "Run / Review Workspace" button packages code + notes + whiteboard and sends to Java | ☐ |
-| 5 | Copilot ghost text appears after 1.5s typing pause | ☐ |
-| 6 | Timer counts down correctly, warns at 5 min and 1 min | ☐ |
-| 7 | AI audio playback works with pulsing indicator | ☐ |
-| 8 | Proctor warning banner displays when alert received | ☐ |
-
----
-
-## PHASE 5 — Gemini Live API & AI Intelligence (Days 13–15: Mar 10–12)
-
-**Checkpoint Deadline: Mar 12 EOD**
-
-> This is the core of the product. The Java Cloud Server becomes the AI orchestrator using a 4-Agent system.
-
-### Backend Tasks (Spring Boot — Cloud, Primary Focus)
-
-#### B5.1 — Gemini Live API Connection via ADK (Agent 2: Interviewer & Proctor)
-- Use the `google-adk` Java SDK (`com.google.adk:google-adk:0.5.0`) to open a secure bidirectional WebSocket to Gemini 2.5 Flash Live API
-- Authenticate using `GOOGLE_API_KEY` from server environment variables — **never exposed to the client**
-- Configure the `SessionConfig` with system instructions and tool declarations (`write_cloud_sql_report`)
-
-#### B5.2 — System Instructions (Secret — Cloud Only)
-Define the AI interviewer personality. This is stored **only on the Java server** and never sent to clients:
-- Greet the candidate warmly, introduce yourself as Owlyn
-- Ask technical questions based on the `ai_instructions` and `generated_questions` fields from the interview config
-- **CRITICAL PROCTORING RULE**: You are receiving a live 1fps video feed of the candidate's webcam. If you visually detect a smartphone, another person in the room, or the candidate looking away from the screen for more than 10 seconds, immediately pause the technical interview and strictly warn them.
-- When the interview is done or time runs out, use `write_cloud_sql_report` to save the evaluation
-- Tone: Professional but encouraging. Like a senior engineer.
-
-#### B5.3 — RunConfig Setup
-Based on **Level 4 Codelab Section 5**:
-- `streamingMode`: BIDI
-- `responseModalities`: AUDIO, TEXT
-- `inputAudioTranscription`: enabled
-- `outputAudioTranscription`: enabled
-- `sessionResumption`: enabled (in case of session timeout — Gemini Live has duration caps)
-- `proactiveAudio`: **true** — this is critical for proctoring. Without it, Gemini waits for the candidate to speak. With it, Gemini can proactively warn about phone use or looking away.
-
-#### B5.4 — Media Routing Loop
-The core routing logic inside the Java server:
-- **Upstream**: receive Base64 JPEG frames and PCM audio from Electron's WSS → decode → feed into Gemini via the ADK's `LiveRequestQueue`
-- **Downstream**: receive Gemini's audio/text responses → forward them to Electron via WSS as JSON events
-- **Tool calls**: receive `FunctionCall` events from Gemini → route to the appropriate handler
-
-#### B5.5 — The Multi-Agent ADK Orchestration (Agent 2 & Agent 3)
-This is a true **Multi-Agent architecture**. The Java Cloud Server maintains **two concurrent Live API WSS connections** via the ADK.
-
-1. **Agent 2 (The Voice/Eyes):** Receives the webcam and mic. Talks to the user.
-2. **Agent 3 (The Brain/Compiler):** Receives the Monaco editor text and Whiteboard canvas data. Its `SessionConfig` has the **native Gemini Code Execution Tool** enabled.
-3. **The Agent-to-Agent Handoff:** When the user clicks "Run / Review Workspace", the Java server pushes the code to Agent 3's stream. Agent 3 natively executes the code, analyzes the whiteboard, and returns a factual evaluation.
-4. The Java Server catches Agent 3's output and uses the ADK to instantly inject a `ClientContent` message into Agent 2's live queue: `{"text": "MESSAGE FROM WORKSPACE AGENT: The user ran the code. It compiled successfully but fails on edge cases. The whiteboard is correct. Ask them about the edge cases."}`
-5. Agent 2 reads this internal system message and speaks out loud to the user.
-
-This guarantees strict **separation of concerns** and **zero latency**: Agent 3 is already awake on its WSS connection, processes code instantly, fires results to Agent 2 in milliseconds, and the AI speaks almost immediately.
-
-#### B5.6 — Post-Interview Assessment (Agent 4: Assessor)
-When the interview ends (candidate says "I'm done" or timer runs out):
-1. Java collects the full transcript and final code from the session
-2. Java sends **one prompt** to the standard **Gemini 2.5 Pro API** using **Structured Output (JSON Schema)** to generate: `{score: int, behavioral_notes: string, code_quality: string, communication_rating: string}`
-3. Java writes this JSON directly to Cloud SQL `interview_reports` table
-4. Java sends the report down to Electron to display the "Interview Complete" summary
-
-#### B5.7 — Tool Call Dispatch
-When Gemini triggers `write_cloud_sql_report`: extract `candidate_email`, `score`, `behavioral_notes` → write directly to Cloud SQL interview_reports table → send confirmation back to Gemini
-
----
-
-### Frontend Tasks
-
-#### F5.1 — Wire Up Media-to-Cloud Pipeline
-- Ensure the media capture from Phase 3 (F3.6) correctly streams to the Java Cloud Server
-- Ensure downstream events from Java are correctly parsed and routed to the UI (audio playback, transcript, proctor alerts)
-
----
-
-### ✅ Phase 5 Checkpoint
-
-| # | Check | Pass? |
-|---|-------|-------|
-| 1 | Java connects to Gemini Live API via ADK WSS | ☐ |
-| 2 | Sending video frame + audio from Electron → Java → Gemini → Gemini responds with voice | ☐ |
-| 3 | Gemini's audio plays through Electron speakers | ☐ |
-| 4 | Proctoring works natively: Gemini warns when phone detected or candidate looks away | ☐ |
-| 5 | Proctor alert appears as red banner in Electron UI | ☐ |
-| 6 | "Run / Review Workspace" → Agent 3 executes code natively via Gemini Code Execution + parses Whiteboard → Gemini gives factual feedback | ☐ |
-| 7 | Post-interview: Assessor generates structured JSON report via Gemini Pro | ☐ |
-
----
-
-## PHASE 6 — Full Integration, Testing & Demo Prep (Days 16–19: Mar 13–16)
-
-**Checkpoint Deadline: Mar 16 EOD (FINAL)**
-
-### Full Team Tasks
-
-#### I6.1 — End-to-End Integration Loop
-Test this exact sequence. Every step must work without manual intervention:
-
-1. **Admin/Recruiter** creates interview → Agent 1 auto-generates questions → gets code `492104`
-2. **Candidate** opens Electron → enters code → passes system check
-3. Kiosk activates → workspace loads
-4. Electron streams A/V to Java Cloud → Java pipes to Gemini
-5. Gemini greets: *"Hello, I'm Owlyn. Let's begin your technical interview."*
-6. Gemini asks a coding question (from auto-generated questions)
-7. Candidate writes code in Monaco editor
-8. Candidate clicks **"Run / Review Workspace"** → Agent 3 natively compiles code via Gemini Code Execution and processes Whiteboard → Injects facts into stream → Gemini speaks feedback with 100% factual confidence
-9. Gemini says: *"Your code compiles and passes. Well done."*
-10. **Proctor test**: hold up a phone → Gemini warns within 10 seconds
-11. Candidate says: *"I'm done"*
-12. Agent 4 (Assessor) generates structured JSON report via Gemini Pro → written to Cloud SQL
-13. Workspace unlocks → candidate sees "Interview Complete"
-14. **Recruiter** views dashboard → report appears with score + notes
-
-#### I6.2 — Specific Test Scenarios
-
-| Test | Action | Expected Result |
-|------|--------|-----------------|
-| Access Control | Open app without JWT | Stays on login screen |
-| Invalid Code | Enter wrong 6-digit code | Error: "Invalid code" |
-| Proctoring | Look at phone for 6s | Gemini says: "Please put your phone away" |
-| Code Execution | Write code and click "Run / Review Workspace" | Agent 3 natively executes code, Agent 2 speaks factual feedback |
-| Whiteboard Vision | Draw a system diagram and click "Run / Review Workspace" | Gemini describes the diagram and gives design feedback |
-| DB Logging | Say "I am done" | Cloud SQL shows new structured JSON report row |
-| Lockdown | Press Alt+Tab during interview | Nothing happens (blocked) |
-| DRM | Try to screen-record with OBS | OBS captures black screen |
-| Focus Breach | System popup steals focus | App regains focus, breach logged |
-| Practice Mode | Use "Practice Interview" | Works without code, no report saved |
-
-#### I6.3 — Recruiter/Admin Monitoring Dashboard (Wire Up)
-- Replace Phase 2 placeholders with real data
-- WebSocket connection to backend for real-time interview status
-- Display behavior flags as they come in
-- Show final report when interview completes
-
-#### I6.4 — Recruiter Flow (Wire Up)
-- Recruiters login → see all Workspace interviews
-- Monitor view: candidate camera feed (relayed), code view, flags
-- Add human feedback form on the report page
-- Submit button finalizes the report
-
-#### I6.5 — Demo Preparation
-- Prepare a clean demo candidate account
-- Pre-write a correct + intentionally buggy code solution
-- Test phone-detection proctoring 3 times for reliability
-- Open Google Cloud Console → Cloud SQL → Prepare query to show inserted report
-- Rehearse the full demo flow at least twice
-
-#### I6.6 — Pitch Script
-
-**The Hook:**
-*"We built a fully isolated, hardware-accelerated technical interview environment that utilizes Gemini 2.5 Multimodal Live API as a native, real-time proctor and conversational interviewer."*
-
-**The Google Architecture Flex:**
-*"We didn't hack together random APIs. This is a pure Google ecosystem showcase. We use JWT for secure entry. We use the google-adk Java SDK in the cloud to stream raw 1fps video and PCM audio directly to Gemini so it can see and hear the candidate natively. There are no clunky computer vision scripts here — Gemini is the vision."*
-
-**The Multi-Agent Orchestration Flex:**
-*"We didn't just build a voice bot; we built a concurrent Multi-Agent architecture using Gemini to the core. Instead of hacking together slow third-party docker containers to run the candidate's code, we spun up a second, concurrent Gemini Live API stream (Agent 3) armed with Google's native Code Execution tool. Agent 3 silently watches the workspace, natively executes the code, parses the whiteboard vision, and then uses the Java ADK to secretly communicate those results in real-time to Agent 2, the Proctor. Agent 2 then speaks to the candidate with 100% factual confidence. It is a completely self-contained, multi-agent Google AI ecosystem."*
-
-**The Dual-Purpose Platform Flex:**
-*"We built Owlyn to be the ultimate secure proctoring environment for recruiters. But we realized the architecture we built — streaming 1fps desktop vision and PCM audio directly to Gemini Live — is perfectly suited for education. So, we added Practice Mode and Tutor Mode. By simply swapping the webcam feed for a screen-share feed, and changing Gemini's system prompt from 'Strict Proctor' to 'Patient Teacher,' Owlyn becomes a personalized desktop tutor that can see your homework, read your code, and guide you through problems in real-time. This shifts Owlyn from a B2B proctoring tool into a B2C educational platform where developers practice with a native, real-time Gemini AI and get private, actionable feedback to improve their careers."*
-
-**The Live Demo Flow (5 Steps):**
-1. Launch Electron, authenticate via JWT.
-2. Show the locked workspace.
-3. Pull out a phone on stage — let the judges hear Gemini native-voice scold you in real-time.
-4. Click "Run / Review Workspace" — show Agent 3 natively compiling code and Agent 2 speaking factual feedback in real-time.
-5. End the interview, open Google Cloud Console, and show the freshly generated structured JSON report in Cloud SQL.
-
----
-
-### ✅ Phase 6 FINAL Checkpoint
-
-| # | Check | Pass? |
-|---|-------|-------|
-| 1 | Full loop (recruiter create → candidate interview → report) works E2E | ☐ |
-| 2 | JWT blocks unauthorized access | ☐ |
-| 3 | Proctoring detects phone and warns verbally (native Gemini) | ☐ |
-| 4 | Smart Assist (Agent 3) executes code via native Gemini tool + parses Whiteboard → factual feedback | ☐ |
-| 5 | Structured JSON report saved in Cloud SQL via Agent 4 (Gemini Pro) | ☐ |
-| 6 | Kiosk mode cannot be bypassed | ☐ |
-| 7 | DRM content protection blocks screen recording | ☐ |
-| 8 | Practice mode works independently | ☐ |
-| 9 | Admin/Recruiter dashboard shows live interview data | ☐ |
-| 10 | Recruiter can add feedback and approve report | ☐ |
-| 11 | Demo rehearsed successfully at least twice | ☐ |
-
----
-
-## PHASE 7 — Stretch Goals (If Time Permits)
-
-> These are NOT required for launch. Only build these if Phases 1–6 are fully passing. They massively enhance the pitch and Devpost submission.
-
-### Stretch 1: Configurable Practice Interviews (The "Mock Interviewer")
-
-**Architectural Fit: 10/10** — Requires almost zero new backend logic.
-
-#### Frontend
-- Add a **"Configure Practice"** screen accessible from the Candidate dashboard
-- Input fields: Topic (e.g., "System Design — Microservices"), Duration (15/30/45 min), Difficulty (Easy/Medium/Hard)
-- On submit: call the same `POST /api/interviews` endpoint that recruiters use, but with `mode: PRACTICE` flag
-
-#### Backend
-- Reuse the existing `POST /api/interviews` endpoint. Agent 1 (Recruiter Assistant) auto-generates custom questions based on the candidate's chosen topic, just like it does for recruiters
-- The generated `ai_instructions` and `generated_questions` are fed into the Live session as usual
-- On completion, Agent 4 returns the report directly to Electron (not saved to DB)
-
-**Why judges love it**: This turns Owlyn into an AI-driven competitor to platforms like Pramp or LeetCode Premium. The candidate uses Gemini as their personal career coach.
-
----
-
-### Stretch 2: Custom "Tutor" Mode (The Screen-Share Helper)
-
-**Architectural Fit: 9/10** — Uses the exact same WSS pipeline, just swaps the camera for the screen.
-
-#### Frontend
-- Add a **"Tutor Mode"** button on the Candidate dashboard
-- Instead of calling `navigator.mediaDevices.getUserMedia({ video: true })` to grab the webcam, use **Electron's native `desktopCapturer` API** to grab the user's screen
-- Still sample at 1fps, compress to Base64 JPEG, stream up the exact same WebSocket to Java
-- **No kiosk mode, no lockdown** — this is a learning tool, not a proctoring tool
-
-#### Backend
-- Swap the system instructions sent to Gemini's `SessionConfig`:
-  - **Interview prompt**: *"You are Owlyn, a strict proctor. If they look away, warn them."*
-  - **Tutor prompt**: *"You are Owlyn, a friendly, patient human tutor. You are looking at my screen. Do not give me direct answers; instead, guide me to figure out the math, translation, or code on the screen step-by-step."*
-- Everything else (WSS pipeline, media routing, voice playback) stays identical
-
-**Why judges love it**: This perfectly highlights the core strength of the Gemini 2.5 Multimodal Live API. Gemini reads UI layouts, parses code from images, and solves math visually. Screen-sharing proves the model can act as an omnipresent desktop co-pilot.
-
----
-
-### Fallback Strategy (If You Run Out of Time)
-
-If you cannot fully implement these stretch goals:
-- Add the **"Tutor Mode"** and **"Configure Practice"** buttons to the Candidate Dashboard UI
-- Have them open a **"Coming Soon"** modal
-- **Mention them in your Devpost video and README** — judges value vision and roadmap thinking
-
----
-
-### ✅ Phase 7 Stretch Checkpoint (Optional)
-
-| # | Check | Pass? |
-|---|-------|-------|
-| 1 | Candidate can configure their own practice interview (topic, duration, difficulty) | ☐ |
-| 2 | Agent 1 generates custom questions from candidate's chosen topic | ☐ |
-| 3 | Practice interview returns feedback to candidate (not saved to DB) | ☐ |
-| 4 | Tutor Mode captures screen instead of webcam via desktopCapturer | ☐ |
-| 5 | Tutor Mode uses patient teaching prompt (no proctoring) | ☐ |
-| 6 | Fallback: buttons exist in UI even if "Coming Soon" | ☐ |
-
----
-
-## Quick Reference: Key Technical Resources
-
-### 1. The Core Architecture Blueprint (Conceptual Python to Java Translation)
-
-**URL:** https://github.com/google/adk-samples/tree/main/python/agents/bidi-demo
-
-* **Target Audience:** Java Backend Devs
-* **Why you need it:** Even though this example is written in Python (FastAPI), it contains the **exact architectural logic** your Java team needs to build. It demonstrates how to initialize the `RunConfig` with `StreamingMode.BIDI`, set up the `LiveRequestQueue`, and handle concurrent upstream (receiving from client) and downstream (sending to client) WebSocket tasks. Translate this logic directly into Spring Boot.
-
-### 2. The Media Streaming Guide (Eyes & Ears)
-
-**URL:** https://codelabs.developers.google.com/way-back-home-level-3/instructions#0
-
-* **Target Audience:** Frontend (Electron) & Java Backend Devs
-* **Why you need it:**
-  * **Frontend:** Provides the exact JavaScript approach needed to capture video frames at 1 FPS, encode them to Base64, capture PCM audio, and format the JSON payloads to send over WebSockets (see the "Implement the WebSocket Hook" section).
-  * **Backend:** Shows exactly how to parse those incoming JSON payloads and dump the `types.Blob` data into the ADK `LiveRequestQueue`.
-
-### 3. The Orchestration & Proctoring Guide (The Brain)
-
-**URL:** https://codelabs.developers.google.com/way-back-home-level-4/instructions#0
-
-* **Target Audience:** Java Backend Devs
-* **Why you need it:**
-  * **Proctoring / Barge-in:** Shows how to configure `proactive_audio: true` inside the `RunConfig` so Gemini can interrupt the candidate naturally if it detects cheating.
-  * **Code Injection:** Demonstrates how the `LiveRequestQueue` handles injected text (`ClientContent`). This is the exact mechanism you will use for the "Run / Review Workspace" feature — taking the Monaco editor string and pushing it upstream so Gemini can verbally analyze it.
-  * **Downstream Parsing:** Details the exact JSON shape of the `serverContent.modelTurn.parts[]` so your backend knows how to extract Gemini's voice chunks and send them to Electron.
-
-### 4. Structured Output for the Database (The Assessor)
-
-**URL:** https://ai.google.dev/gemini-api/docs/structured-output
-
-* **Target Audience:** Java Backend Devs
-* **Why you need it:** After the Live WebSocket closes, Agent 4 (Gemini Pro) takes the transcript and generates the final evaluation. This documentation shows how to pass a JSON Schema into the API call to guarantee Gemini returns a perfectly formatted JSON object (`score`, `behavioral_notes`, `code_quality`) that maps exactly to your Google Cloud SQL `interview_reports` table.
-
-### 5. Gemini Native Code Execution (Agent 3's Compiler)
-
-**URL:** https://ai.google.dev/gemini-api/docs/code-execution
-
-* **Target Audience:** Java Backend Devs
-* **Why you need it:** Agent 3's `SessionConfig` enables Gemini's built-in Code Execution tool. When the candidate clicks "Run / Review Workspace", Agent 3 natively compiles and runs the code inside Gemini's own sandboxed environment — no third-party containers needed. This is a 100% Google ecosystem solution. The tool returns literal `stdout`, `stderr`, and execution analysis that Agent 3 passes to Agent 2 via the ADK.
+## PHASE 7 — Stretch Goals (Tutor Mode)
+
+**Tutor Mode Architecture:**
+*   Frontend: Don't lock down the OS. Use Electron `desktopCapturer` to share the user's entire desktop (so they can use VS Code). Publish to LiveKit.
+*   Java Backend: Flags the room as `TUTOR`. 
+*   Python Worker: Reads the flag. **Turns OFF the Proctor Sentinel.** Changes Agent 2's prompt to: *"You are a friendly, patient human tutor looking at my screen."*
+*   The Visual Compiler (Sentinel B) remains ON to catch bugs in the user's IDE.
+
+***
